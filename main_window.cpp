@@ -8,6 +8,9 @@
 #include <QLineEdit>
 #include <QDoubleValidator>
 #include <QLocale>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QSizePolicy>
 
 #include <limits>
 #include <memory>
@@ -90,7 +93,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto cam_position_label = std::make_unique<QLabel>("Camera position (x, y, z):", tool_bar);
     {
         QFont f = cam_position_label->font();
-        f.setPointSizeF(f.pointSizeF() * 1.1);
+        f.setPointSizeF(f.pointSizeF() * 1.2);
         cam_position_label->setFont(f);
     }
     tool_bar->addWidget(cam_position_label.release());
@@ -116,7 +119,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto cam_rotation_label = std::make_unique<QLabel>("Camera rotation (x, y, z):", tool_bar);
     {
         QFont f = cam_rotation_label->font();
-        f.setPointSizeF(f.pointSizeF() * 1.1);
+        f.setPointSizeF(f.pointSizeF() * 1.2);
         cam_rotation_label->setFont(f);
     }
     tool_bar->addWidget(cam_rotation_label.release());
@@ -160,6 +163,48 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                 camera_rotation_y_line_edit_->setText(format(y));
                 camera_rotation_z_line_edit_->setText(format(z));
             });
+
+    tool_bar->addSeparator();
+    const QAction *object_import = tool_bar->addAction("Object");
+    if (QWidget *object_widget = tool_bar->widgetForAction(const_cast<QAction*>(object_import)))
+    {
+        QFont f = object_widget->font();
+        f.setPointSizeF(f.pointSizeF() * 1.2);
+        object_widget->setFont(f);
+    }
+    if (QWidget *object_button = tool_bar->widgetForAction(const_cast<QAction*>(object_import)))
+    {
+        object_button->setObjectName("objectButton");
+        object_button->setStyleSheet(
+            "#objectButton {"
+            "  background-color: #43a047;"
+            "  color: white;"
+            "  padding: 6px 12px;"
+            "  border-radius: 4px;"
+            "  font-weight: 600;"
+            "}"
+            "#objectButton:hover {"
+            "  background-color: #2e7d32;"
+            "}"
+            "#objectButton:pressed {"
+            "  background-color: #1b5e20;"
+            "}"
+        );
+    }
+    connect(object_import, &QAction::triggered, this, [this, scene]
+    {
+        const QString file_path = QFileDialog::getOpenFileName(
+            this,
+            tr("Import OBJ"),
+            QString(),
+            tr("OBJ Files (*.obj)")
+        );
+        if (file_path.isEmpty()) return;
+        if (!scene->load_object(file_path))
+        {
+            QMessageBox::warning(this, tr("Import failed"), tr("Unable to load the selected OBJ file."));
+        }
+    });
 
     // Toolbar 2: Help (full-width below)
     addToolBarBreak();  // Place next toolbar on a new row

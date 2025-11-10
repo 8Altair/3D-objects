@@ -1,5 +1,16 @@
 #include "view_3D.h"
 
+#include <QDebug>
+
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <string>
+
 
 View::View(QWidget *parent) : QOpenGLWidget(parent)
 {
@@ -11,6 +22,8 @@ View::View(QWidget *parent) : QOpenGLWidget(parent)
 View::~View()
 {
     makeCurrent();    // Make this widget's OpenGL context current; required so GL calls below operate on the right context
+
+    delete_imported_objects();
 
     /* If a vertex buffer (VBO) was created (non-zero ID), delete it from GPU memory to free VRAM
        Then reset its handle to 0 (the “no buffer” default value). */
@@ -89,6 +102,17 @@ void View::paintGL()
         glLineWidth(2.0f);
         draw_cube_edges(Mg, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         glLineWidth(1.0f);
+    }
+
+    int object_index = 0;
+    for (const auto &object : imported_objects_)
+    {
+        const float r = 0.6f + 0.15f * static_cast<float>(object_index % 3);
+        const float g = 0.65f + 0.12f * static_cast<float>((object_index + 1) % 3);
+        constexpr float b = 0.75f;
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), object.translation);
+        draw_mesh(object, model, glm::vec4(r, g, b, 1.0f));
+        object_index++;
     }
 
     glBindVertexArray(0);
@@ -175,11 +199,152 @@ void View::keyPressEvent(QKeyEvent* event)
 
 void View::reset_all()
 {
+    makeCurrent();
+    delete_imported_objects();
+    doneCurrent();
+
     cam_position = {3.0f, 3.5f, 12.5f};
     cam_rotation_degree = {-15.0f, 15.0f, 0.0f};
     update_projection(width(), height());
     emit_camera_state();
     update();
+}
+
+bool View::load_object(const QString &file_path)
+{
+    Assimp::Importer importer;
+    constexpr unsigned int flags =
+        aiProcess_Triangulate |
+        aiProcess_JoinIdenticalVertices |
+        aiProcess_GenSmoothNormals |
+        aiProcess_ImproveCacheLocality;
+
+    const aiScene *scene = importer.ReadFile(file_path.toStdString(), flags);
+    if (!scene || !scene->HasMeshes())
+    {
+        qWarning() << "Assimp failed to load OBJ:" << QString::fromStdString(importer.GetErrorString());
+        return false;
+    }
+
+    const aiMesh *mesh = scene->mMeshes[0];
+    if (!mesh || !mesh->HasPositions())
+    {
+        qWarning() << "OBJ mesh has no positions.";
+        return false;
+    }
+
+    std::vector<float> vertices;
+    vertices.reserve(mesh->mNumFaces * 3 * 3);
+
+    float min_x = std::numeric_limits<float>::max();
+    float min_y = std::numeric_limits<float>::max();
+    float min_z = std::numeric_limits<float>::max();
+    float max_x = std::numeric_limits<float>::lowest();
+    float max_y = std::numeric_limits<float>::lowest();
+    float max_z = std::numeric_limits<float>::lowest();
+
+    for (unsigned int faceIndex(0); faceIndex < mesh->mNumFaces; faceIndex++)
+    {
+        const aiFace &face = mesh->mFaces[faceIndex];
+        if (face.mNumIndices < 3) continue;
+
+        for (unsigned int i(0); i < face.mNumIndices; i++)
+        {
+            const unsigned int vertex_index = face.mIndices[i];
+            if (vertex_index >= mesh->mNumVertices) continue;
+
+            const aiVector3D &vertex = mesh->mVertices[vertex_index];
+
+            min_x = std::min(min_x, vertex.x);
+            min_y = std::min(min_y, vertex.y);
+            min_z = std::min(min_z, vertex.z);
+            max_x = std::max(max_x, vertex.x);
+            max_y = std::max(max_y, vertex.y);
+            max_z = std::max(max_z, vertex.z);
+
+            vertices.push_back(vertex.x);
+            vertices.push_back(vertex.y);
+            vertices.push_back(vertex.z);
+        }
+    }
+
+    if (vertices.empty())
+    {
+        qWarning() << "OBJ contains no triangles.";
+        return false;
+    }
+
+    const float center_x = 0.5f * (min_x + max_x);
+    const float center_z = 0.5f * (min_z + max_z);
+    for (std::size_t i = 0; i < vertices.size(); i += 3)
+    {
+        vertices[i + 0] -= center_x;
+        vertices[i + 1] -= min_y;
+        vertices[i + 2] -= center_z;
+    }
+
+    ImportedObject object;
+    object.vertex_count = static_cast<GLsizei>(vertices.size() / 3);
+    object.footprint = std::max({1.0f, max_x - min_x, max_z - min_z}) + 0.5f;
+
+    makeCurrent();
+
+    glGenVertexArrays(1, &object.vao);
+    glBindVertexArray(object.vao);
+
+    glGenBuffers(1, &object.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, object.vbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), nullptr);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    constexpr float ground_top = -2.0f + 0.15f;
+    glm::vec3 desired_translation{0.0f, ground_top, 0.0f};
+
+    const auto overlaps = [this](const glm::vec3 &position)
+    {
+        constexpr float epsilon = 0.05f;
+        return std::ranges::any_of(imported_objects_,
+                                   [&](const ImportedObject &existing)
+                                   {
+                                       return std::abs(existing.translation.x - position.x) < epsilon &&
+                                           std::abs(existing.translation.z - position.z) < epsilon;
+                                   });
+    };
+
+    while (overlaps(desired_translation))
+    {
+        desired_translation.x += object.footprint;
+    }
+
+    object.translation = desired_translation;
+    imported_objects_.push_back(object);
+
+    doneCurrent();
+    update();
+    return true;
+}
+
+void View::delete_imported_objects()
+{
+    for (auto &object : imported_objects_)
+    {
+        if (object.vbo)
+        {
+            glDeleteBuffers(1, &object.vbo);
+            object.vbo = 0;
+        }
+        if (object.vao)
+        {
+            glDeleteVertexArrays(1, &object.vao);
+            object.vao = 0;
+        }
+    }
+    imported_objects_.clear();
 }
 
 void View::setup_shaders()
@@ -361,4 +526,15 @@ void View::draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color)
     glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
     glDrawArrays(GL_LINES, 0, 12 * 2);
     glBindVertexArray(vertex_array_object);
+}
+
+void View::draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color)
+{
+    if (object.vertex_count <= 0) return;
+    const glm::mat4 mvp = projection * view_matrix * model;
+    glBindVertexArray(object.vao);
+    glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    glDrawArrays(GL_TRIANGLES, 0, object.vertex_count);
+    glBindVertexArray(0);
 }

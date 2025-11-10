@@ -39,13 +39,30 @@ FetchContent_Declare(
         GIT_TAG        master)
 FetchContent_MakeAvailable(glm)
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+        assimp
+        GIT_REPOSITORY https://github.com/assimp/assimp.git
+        GIT_TAG        v5.3.1)
+FetchContent_MakeAvailable(assimp)
+
 target_link_libraries(3D-objects PRIVATE
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
         Qt6::OpenGL
         Qt6::OpenGLWidgets
-        glm::glm)
+        glm::glm
+        assimp::assimp)
 
 
 if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)

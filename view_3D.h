@@ -8,6 +8,9 @@
 #include <glm/gtc/matrix_transform.hpp> // GLM transformations (translate, rotate, scale, ortho)
 #include <glm/gtc/type_ptr.hpp> // glm::value_ptr for sending matrices to shader
 
+#include <QString>
+#include <vector>
+
 // NOLINTNEXTLINE(readability-duplicate-include)
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -31,6 +34,15 @@ signals:
     void cameraRotationChanged(float x, float y, float z);
 
 private:
+    struct ImportedObject
+    {
+        GLuint vao = 0;
+        GLuint vbo = 0;
+        GLsizei vertex_count = 0;
+        glm::vec3 translation{};
+        float footprint = 1.0f;
+    };
+
     GLuint shader_program_id = 0;   // OpenGL shader program ID (compiled+linked GLSL program); it identifies the linked vertex + fragment shader pair used for rendering
     GLint uniform_location_mvp = -1;    // Uniform location for MVP matrix (cached after link)
     GLint uniform_location_color = -1;  // Uniform location for per-draw color (cached after link)
@@ -40,6 +52,8 @@ private:
     GLuint vertex_buffer_object = 0;   // Vertex Buffer Object handle
     GLuint edge_vertex_array_object = 0;   // Wireframe VAO
     GLuint edge_vertex_buffer_object = 0;  // Wireframe VBO
+
+    std::vector<ImportedObject> imported_objects_;
 
     glm::mat4 projection{};  // Projection matrix
     glm::mat4 view_matrix{}; // View matrix (camera)
@@ -59,6 +73,8 @@ private:
     void setup_geometry();  // Create VAO/VBO and upload unit-cube vertex data
     void draw_cube(const glm::mat4 &model, const glm::vec4 &color);  // Set uniforms and draw 36 vertices for one cube
     void draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color);
+    void draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color);
+    void delete_imported_objects();
 
 protected:
     void initializeGL() override;   // Called once: load GL functions, create buffers/shaders, states
@@ -78,6 +94,7 @@ public:
     // Quick setters used by the toolbar (apply + repaint)
     void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; emit_camera_state(); update(); }
     void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; emit_camera_state(); update(); }
+    bool load_object(const QString &file_path);
 
     void reset_all();
 };
