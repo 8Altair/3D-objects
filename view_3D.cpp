@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <ranges>
 #include <string>
 
 namespace {
@@ -106,7 +107,8 @@ void View::paintGL()
         glm::mat4 Mg(1.0f);
         Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Slightly below origin
         Mg = glm::scale(Mg, glm::vec3(kGroundExtent, 0.30f, kGroundExtent));
-        draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f));
+        draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f),
+                  ColorMode::Uniform);
         glLineWidth(2.0f);
         draw_cube_edges(Mg, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         glLineWidth(1.0f);
@@ -120,7 +122,8 @@ void View::paintGL()
         const float g = is_selected ? 0.85f : 0.65f + 0.12f * static_cast<float>((object_index + 1) % 3);
         const float b = is_selected ? 0.35f : 0.75f;
         glm::mat4 model = glm::translate(glm::mat4(1.0f), object.translation);
-        draw_mesh(object, model, glm::vec4(r, g, b, 1.0f));
+        draw_mesh(object, model, glm::vec4(r, g, b, 1.0f),
+                  color_mode_);
         object_index++;
     }
 
@@ -355,6 +358,7 @@ void View::reset_all()
     panning = false;
     scrolling_navigation_ = false;
     focus_point_ = {0.0f, 0.0f, 0.0f};
+    color_mode_ = ColorMode::Uniform;
     update_projection(width(), height());
     emit_camera_state();
     update();
@@ -383,8 +387,15 @@ bool View::load_object(const QString &file_path)
         return false;
     }
 
-    std::vector<float> vertices;
-    vertices.reserve(mesh->mNumFaces * 3 * 3);
+    struct VertexData
+    {
+        glm::vec3 position{};
+        glm::vec3 normal{0.0f, 1.0f, 0.0f};
+        glm::vec2 uv{0.0f, 0.0f};
+    };
+
+    std::vector<VertexData> vertices;
+    vertices.reserve(mesh->mNumFaces * 3);
 
     float min_x = std::numeric_limits<float>::max();
     float min_y = std::numeric_limits<float>::max();
@@ -393,6 +404,8 @@ bool View::load_object(const QString &file_path)
     float max_y = std::numeric_limits<float>::lowest();
     float max_z = std::numeric_limits<float>::lowest();
     float max_radius_sq = 0.0f;
+    const bool has_normals = mesh->HasNormals();
+    const bool has_uvs = mesh->HasTextureCoords(0);
 
     for (unsigned int faceIndex(0); faceIndex < mesh->mNumFaces; faceIndex++)
     {
@@ -413,12 +426,19 @@ bool View::load_object(const QString &file_path)
             max_y = std::max(max_y, vertex.y);
             max_z = std::max(max_z, vertex.z);
 
-            vertices.push_back(vertex.x);
-            vertices.push_back(vertex.y);
-            vertices.push_back(vertex.z);
-
-            const float radius_sq = vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z;
-            max_radius_sq = std::max(max_radius_sq, radius_sq);
+            VertexData data;
+            data.position = {vertex.x, vertex.y, vertex.z};
+            if (has_normals)
+            {
+                const aiVector3D &normal = mesh->mNormals[vertex_index];
+                data.normal = {normal.x, normal.y, normal.z};
+            }
+            if (has_uvs)
+            {
+                const aiVector3D &uv = mesh->mTextureCoords[0][vertex_index];
+                data.uv = {uv.x, uv.y};
+            }
+            vertices.push_back(data);
         }
     }
 
@@ -430,17 +450,32 @@ bool View::load_object(const QString &file_path)
 
     const float center_x = 0.5f * (min_x + max_x);
     const float center_z = 0.5f * (min_z + max_z);
-    for (std::size_t i = 0; i < vertices.size(); i += 3)
+    for (auto &vertex : vertices)
     {
-        vertices[i + 0] -= center_x;
-        vertices[i + 1] -= min_y;
-        vertices[i + 2] -= center_z;
+        vertex.position.x -= center_x;
+        vertex.position.y -= min_y;
+        vertex.position.z -= center_z;
+        max_radius_sq = std::max(max_radius_sq, glm::dot(vertex.position, vertex.position));
     }
 
     ImportedObject object;
-    object.vertex_count = static_cast<GLsizei>(vertices.size() / 3);
+    object.vertex_count = static_cast<GLsizei>(vertices.size());
     object.base_footprint = std::max({1.0f, max_x - min_x, max_z - min_z}) + 0.5f;
     object.radius = std::sqrt(max_radius_sq);
+
+    std::vector<float> interleaved;
+    interleaved.reserve(vertices.size() * 8);
+    for (const auto & [position, normal, uv] : vertices)
+    {
+        interleaved.push_back(position.x);
+        interleaved.push_back(position.y);
+        interleaved.push_back(position.z);
+        interleaved.push_back(normal.x);
+        interleaved.push_back(normal.y);
+        interleaved.push_back(normal.z);
+        interleaved.push_back(uv.x);
+        interleaved.push_back(uv.y);
+    }
 
     makeCurrent();
 
@@ -449,10 +484,15 @@ bool View::load_object(const QString &file_path)
 
     glGenBuffers(1, &object.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, object.vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(interleaved.size() * sizeof(float)), interleaved.data(), GL_STATIC_DRAW);
 
+    constexpr GLsizei stride = 8 * sizeof(GLfloat);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(6 * sizeof(GLfloat)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -486,6 +526,13 @@ bool View::load_object(const QString &file_path)
     return true;
 }
 
+void View::set_color_mode(const ColorMode mode)
+{
+    if (color_mode_ == mode) return;
+    color_mode_ = mode;
+    update();
+}
+
 void View::delete_imported_objects()
 {
     for (auto &object : imported_objects_)
@@ -508,125 +555,181 @@ void View::delete_imported_objects()
 
 void View::setup_shaders()
 {
-    /* Vertex shader: transforms vertex position to clip space using MVP matrix */
     static auto vertex_shader_source = R"(#version 450 core
     layout(location = 0) in vec3 position;
+    layout(location = 1) in vec3 normal;
+    layout(location = 2) in vec2 texcoord;
+
+    uniform mat4 model;
     uniform mat4 mvp;
+    uniform mat3 normal_matrix;
+
+    out vec3 vWorldPosition;
+    out vec3 vNormal;
+    out vec2 vTexCoord;
+
     void main()
     {
+        vec4 world_position = model * vec4(position, 1.0);
+        vWorldPosition = world_position.xyz;
+        vNormal = normalize(normal_matrix * normal);
+        vTexCoord = texcoord;
         gl_Position = mvp * vec4(position, 1.0);
     }
     )";
 
-    /* Fragment shader: outputs a uniform color for the square */
     static auto fragment_shader_source = R"(#version 450 core
+    layout(location = 0) out vec4 FragColor;
+
+    in vec3 vWorldPosition;
+    in vec3 vNormal;
+    in vec2 vTexCoord;
+
     uniform vec4 color;
-    out vec4 FragColor;
+    uniform int color_mode;
+
+    vec3 encode_position()
+    {
+        float length_value = length(vWorldPosition);
+        if (length_value > 1e-5)
+        {
+            vec3 normalized = clamp(vWorldPosition / length_value, vec3(-1.0), vec3(1.0));
+            return 0.5 + 0.5 * normalized;
+        }
+        return vec3(0.5);
+    }
+
+    vec3 encode_normal()
+    {
+        float length_value = length(vNormal);
+        vec3 normalized = length_value > 1e-5 ? normalize(vNormal) : vec3(0.0, 1.0, 0.0);
+        return 0.5 + 0.5 * normalized;
+    }
+
+    vec3 encode_uv()
+    {
+        vec2 wrapped = fract(vTexCoord);
+        return vec3(wrapped, 0.5);
+    }
+
     void main()
     {
-        FragColor = color;
+        vec3 final_color = color.rgb;
+
+        if (color_mode == 1)
+        {
+            final_color = encode_position();
+        }
+        else if (color_mode == 2)
+        {
+            final_color = encode_normal();
+        }
+        else if (color_mode == 3)
+        {
+            final_color = encode_uv();
+        }
+
+        if (color_mode != 0)
+        {
+            final_color = mix(final_color, color.rgb, 0.35);
+        }
+
+        FragColor = vec4(final_color, color.a);
     }
     )";
 
-    shader_program_id = glCreateProgram();  // Create a new OpenGL shader program
+    shader_program_id = glCreateProgram();
     const GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex_shader, 1, &vertex_shader_source, nullptr);
-    glCompileShader(vertex_shader); // Compile vertex shader
-    glAttachShader(shader_program_id, vertex_shader);   // Attach compiled vertex shader
+    glCompileShader(vertex_shader);
+    glAttachShader(shader_program_id, vertex_shader);
     const GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment_shader, 1, &fragment_shader_source, nullptr);
-    glCompileShader(fragment_shader);   // Compile fragment shader
-    glAttachShader(shader_program_id, fragment_shader); // Attach compiled fragment shader
-    glLinkProgram(shader_program_id);   // Link vertex + fragment into program
+    glCompileShader(fragment_shader);
+    glAttachShader(shader_program_id, fragment_shader);
+    glLinkProgram(shader_program_id);
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
-    // Cache uniform locations
     uniform_location_mvp = glGetUniformLocation(shader_program_id, "mvp");
     uniform_location_color = glGetUniformLocation(shader_program_id, "color");
+    uniform_location_model = glGetUniformLocation(shader_program_id, "model");
+    uniform_location_normal_matrix = glGetUniformLocation(shader_program_id, "normal_matrix");
+    uniform_location_color_mode = glGetUniformLocation(shader_program_id, "color_mode");
 }
 
 void View::setup_geometry()
 {
-    // Define a unit cube (side length 1) using 12 triangles (2 triangles per face).
-    /* Each face's vertices are specified in counter-clockwise order as seen from outside, so that
-       the outward face is considered the front side (for face culling if enabled). */
-    constexpr GLfloat unit_cube_vertices[36 * 3] =
+    constexpr GLfloat unit_cube_vertices[] =
     {
+        // position               normal                 uv
         // Front face (-Z)
-        -0.5f, -0.5f, -0.5f,  // Bottom-left-front
-        -0.5f,  0.5f, -0.5f,  // Top-left-front
-         0.5f,  0.5f, -0.5f,  // Top-right-front
-        -0.5f, -0.5f, -0.5f,  // Bottom-left-front (reused)
-         0.5f,  0.5f, -0.5f,  // Top-right-front
-         0.5f, -0.5f, -0.5f,  // Bottom-right-front
+        -0.5f, -0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,      0.0f,  0.0f, -1.0f,    1.0f, 0.0f,
 
         // Right face (+X)
-         0.5f, -0.5f, -0.5f,  // Bottom-right-front
-         0.5f,  0.5f, -0.5f,  // Top-right-front
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-         0.5f, -0.5f, -0.5f,  // Bottom-right-front (reused)
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-         0.5f, -0.5f,  0.5f,  // Bottom-right-back
+         0.5f, -0.5f, -0.5f,      1.0f,  0.0f,  0.0f,    0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,      1.0f,  0.0f,  0.0f,    0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,      1.0f,  0.0f,  0.0f,    1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,      1.0f,  0.0f,  0.0f,    0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,      1.0f,  0.0f,  0.0f,    1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,      1.0f,  0.0f,  0.0f,    1.0f, 0.0f,
 
         // Back face (+Z)
-        -0.5f, -0.5f,  0.5f,  // Bottom-left-back
-         0.5f, -0.5f,  0.5f,  // Bottom-right-back
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-        -0.5f, -0.5f,  0.5f,  // Bottom-left-back  (reused)
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-        -0.5f,  0.5f,  0.5f,  // Top-left-back
+        -0.5f, -0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,      0.0f,  0.0f,  1.0f,    0.0f, 1.0f,
 
         // Left face (-X)
-        -0.5f, -0.5f,  0.5f,  // Bottom-left-back
-        -0.5f,  0.5f,  0.5f,  // Top-left-back
-        -0.5f,  0.5f, -0.5f,  // Top-left-front
-        -0.5f, -0.5f,  0.5f,  // Bottom-left-back  (reused)
-        -0.5f,  0.5f, -0.5f,  // Top-left-front
-        -0.5f, -0.5f, -0.5f,  // Bottom-left-front
+        -0.5f, -0.5f,  0.5f,     -1.0f,  0.0f,  0.0f,    0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,     -1.0f,  0.0f,  0.0f,    0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,     -1.0f,  0.0f,  0.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,     -1.0f,  0.0f,  0.0f,    0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,     -1.0f,  0.0f,  0.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,     -1.0f,  0.0f,  0.0f,    1.0f, 0.0f,
 
         // Top face (+Y)
-        -0.5f,  0.5f, -0.5f,  // Top-left-front
-        -0.5f,  0.5f,  0.5f,  // Top-left-back
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-        -0.5f,  0.5f, -0.5f,  // Top-left-front   (reused)
-         0.5f,  0.5f,  0.5f,  // Top-right-back
-         0.5f,  0.5f, -0.5f,  // Top-right-front
+        -0.5f,  0.5f, -0.5f,      0.0f,  1.0f,  0.0f,    0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,      0.0f,  1.0f,  0.0f,    0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,      0.0f,  1.0f,  0.0f,    1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,      0.0f,  1.0f,  0.0f,    0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,      0.0f,  1.0f,  0.0f,    1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,      0.0f,  1.0f,  0.0f,    1.0f, 0.0f,
 
         // Bottom face (-Y)
-        -0.5f, -0.5f, -0.5f,  // Bottom-left-front
-         0.5f, -0.5f, -0.5f,  // Bottom-right-front
-         0.5f, -0.5f,  0.5f,  // Bottom-right-back
-        -0.5f, -0.5f, -0.5f,  // Bottom-left-front  (reused)
-         0.5f, -0.5f,  0.5f,  // Bottom-right-back
-        -0.5f, -0.5f,  0.5f   // Bottom-left-back
+        -0.5f, -0.5f, -0.5f,      0.0f, -1.0f,  0.0f,    0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,      0.0f, -1.0f,  0.0f,    1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,      0.0f, -1.0f,  0.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,      0.0f, -1.0f,  0.0f,    0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,      0.0f, -1.0f,  0.0f,    1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,      0.0f, -1.0f,  0.0f,    0.0f, 1.0f
     };
 
-    // Generate and bind VAO and VBO, then upload cube vertex data
     glGenVertexArrays(1, &vertex_array_object);
     glBindVertexArray(vertex_array_object);
 
-    // VBO: upload vertex data once
     glGenBuffers(1, &vertex_buffer_object);
     glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(unit_cube_vertices), unit_cube_vertices,GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(unit_cube_vertices), unit_cube_vertices, GL_STATIC_DRAW);
 
-    // Vertex format: layout(location=0) = vec3 position, tightly packed
+    constexpr GLsizei stride = 8 * sizeof(GLfloat);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(
-        0,                      // Attribute index (matches shader layout(location=0))
-        3,                      // 3 floats per vertex (x,y,z)
-        GL_FLOAT,               // Data type
-        GL_FALSE,               // No normalization
-        3 * sizeof(GLfloat),    // Stride: tightly packed vec3
-        nullptr                 // Offset into buffer
-    );
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(6 * sizeof(GLfloat)));
 
-    // Clean up binds
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    // Edge (wireframe) geometry: 12 segments describing cube edges
     constexpr GLfloat cube_edge_vertices[12 * 2 * 3] =
     {
         // Bottom rectangle
@@ -660,41 +763,49 @@ void View::setup_geometry()
     glBindVertexArray(0);
 }
 
-void View::draw_cube(const glm::mat4 &model, const glm::vec4 &color) // Draw one cube with a given transform and RGBA color
+void View::draw_cube(const glm::mat4 &model, const glm::vec4 &color, const ColorMode mode) // Draw one cube with a given transform and RGBA color
 {
     const glm::mat4 mvp = projection * view_matrix * model;    // Build the final transform: Model→View→Projection (rightmost applied first)
+    const auto normal_matrix = glm::mat3(glm::transpose(glm::inverse(model)));
 
-    // Send uniforms with raw GL calls
-    glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp)); // Upload a 4x4 float matrix uniform to the current shader program
-    /* Location of "mvp" uniform, number of matrices being sent (just one), do NOT transpose
-       (QMatrix4x4 is already column-major for OpenGL), pointer to the 16 floats (contiguous) inside QMatrix4x4 */
-    glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);    // Upload a vec4 uniform to the fragment shader (the color)
-    // Location of "color" uniform, RGBA components as floats in [0,1]
+    if (uniform_location_mvp >= 0) glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    if (uniform_location_model >= 0) glUniformMatrix4fv(uniform_location_model, 1, GL_FALSE, glm::value_ptr(model));
+    if (uniform_location_normal_matrix >= 0) glUniformMatrix3fv(uniform_location_normal_matrix, 1, GL_FALSE, glm::value_ptr(normal_matrix));
+    if (uniform_location_color >= 0) glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    if (uniform_location_color_mode >= 0) glUniform1i(uniform_location_color_mode, static_cast<int>(mode));
 
     glDrawArrays(GL_TRIANGLES, 0, 36);  // Draw 36 vertices (12 triangles) for one cube
-    /* Each draw call reuses the cube VBO: interpret the vertex data as 12 independent
-       triangles (starting at vertex 0) that form a complete cube. */
 }
 
 void View::draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color)
 {
     const glm::mat4 mvp = projection * view_matrix * model;
+    const auto normal_matrix = glm::mat3(glm::transpose(glm::inverse(model)));
 
     glBindVertexArray(edge_vertex_array_object);
-    glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
-    glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    if (uniform_location_mvp >= 0) glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    if (uniform_location_model >= 0) glUniformMatrix4fv(uniform_location_model, 1, GL_FALSE, glm::value_ptr(model));
+    if (uniform_location_normal_matrix >= 0) glUniformMatrix3fv(uniform_location_normal_matrix, 1, GL_FALSE, glm::value_ptr(normal_matrix));
+    if (uniform_location_color >= 0) glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    const auto previous_mode = static_cast<GLint>(color_mode_);
+    if (uniform_location_color_mode >= 0) glUniform1i(uniform_location_color_mode, static_cast<int>(ColorMode::Uniform));
     glDrawArrays(GL_LINES, 0, 12 * 2);
+    if (uniform_location_color_mode >= 0) glUniform1i(uniform_location_color_mode, previous_mode);
     glBindVertexArray(vertex_array_object);
 }
 
-void View::draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color)
+void View::draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color, const ColorMode mode)
 {
     if (object.vertex_count <= 0) return;
     const glm::mat4 scaled_model = glm::scale(model, glm::vec3(object.scale));
     const glm::mat4 mvp = projection * view_matrix * scaled_model;
+    const auto normal_matrix = glm::mat3(glm::transpose(glm::inverse(scaled_model)));
     glBindVertexArray(object.vao);
-    glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
-    glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    if (uniform_location_mvp >= 0) glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    if (uniform_location_model >= 0) glUniformMatrix4fv(uniform_location_model, 1, GL_FALSE, glm::value_ptr(scaled_model));
+    if (uniform_location_normal_matrix >= 0) glUniformMatrix3fv(uniform_location_normal_matrix, 1, GL_FALSE, glm::value_ptr(normal_matrix));
+    if (uniform_location_color >= 0) glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    if (uniform_location_color_mode >= 0) glUniform1i(uniform_location_color_mode, static_cast<int>(mode));
     glDrawArrays(GL_TRIANGLES, 0, object.vertex_count);
     glBindVertexArray(0);
 }

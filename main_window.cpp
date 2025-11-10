@@ -6,14 +6,18 @@
 #include <QAction>
 #include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QString>
 #include <QDoubleValidator>
 #include <QLocale>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSizePolicy>
+#include <QSignalBlocker>
 
 #include <limits>
 #include <memory>
+#include <algorithm>
 
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)   // Initialize base QMainWindow and allocate UI helper
@@ -87,6 +91,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         camera_rotation_x_line_edit_->setText("-15");
         camera_rotation_y_line_edit_->setText("15");
         camera_rotation_z_line_edit_->setText("0");
+
+        if (color_mode_combo_box_)
+        {
+            const QSignalBlocker blocker(color_mode_combo_box_);
+            color_mode_combo_box_->setCurrentIndex(static_cast<int>(View::ColorMode::Uniform));
+        }
     });
 
     tool_bar->addSeparator();
@@ -211,6 +221,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     QToolBar* help_tool_bar = addToolBar("Help");
     help_tool_bar->setMovable(false);
+
+    help_tool_bar->addSeparator();
+    auto *color_source_label = new QLabel("Color source:", help_tool_bar);
+    {
+        QFont f = color_source_label->font();
+        f.setPointSizeF(f.pointSizeF() * 1.05);
+        color_source_label->setFont(f);
+    }
+    color_source_label->setStyleSheet("padding:0 4px;");
+    help_tool_bar->addWidget(color_source_label);
+
+    color_mode_combo_box_ = new QComboBox(help_tool_bar);
+    color_mode_combo_box_->addItems({QStringLiteral("Uniform"),
+                                     QStringLiteral("Position"),
+                                     QStringLiteral("Normal"),
+                                     QStringLiteral("UV")});
+    color_mode_combo_box_->setCurrentIndex(static_cast<int>(View::ColorMode::Uniform));
+    color_mode_combo_box_->setFixedWidth(140);
+    help_tool_bar->addWidget(color_mode_combo_box_);
+    connect(color_mode_combo_box_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [scene](const int index)
+            {
+                const int clamped = std::clamp(index, 0, 3);
+                scene->set_color_mode(static_cast<View::ColorMode>(clamped));
+            });
+
+    help_tool_bar->addSeparator();
 
     const QString help_text =
         "Left mouse button: Orbit scene / deselect   |   Middle mouse button (hold): Orbit scene   |   Right mouse button (+Shift): Pan or drag selected object\n"

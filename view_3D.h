@@ -29,6 +29,26 @@ class View final : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core // 
 {
     Q_OBJECT
 
+public:
+    enum class ColorMode : int
+    {
+        Uniform = 0,
+        Position = 1,
+        Normal = 2,
+        UV = 3
+    };
+
+    explicit View(QWidget *parent = nullptr);   // Constructor
+    ~View() override;   // Destructor
+
+    // Quick setters used by the toolbar (apply + repaint)
+    void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; emit_camera_state(); update(); }
+    void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; emit_camera_state(); update(); }
+    bool load_object(const QString &file_path);
+    void set_color_mode(ColorMode mode);
+
+    void reset_all();
+
 signals:
     void cameraPositionChanged(float x, float y, float z);
     void cameraRotationChanged(float x, float y, float z);
@@ -45,9 +65,42 @@ private:
         float scale = 1.0f;
     };
 
+    using QOpenGLFunctions_4_5_Core::glAttachShader;
+    using QOpenGLFunctions_4_5_Core::glBindBuffer;
+    using QOpenGLFunctions_4_5_Core::glBindVertexArray;
+    using QOpenGLFunctions_4_5_Core::glBufferData;
+    using QOpenGLFunctions_4_5_Core::glClear;
+    using QOpenGLFunctions_4_5_Core::glClearColor;
+    using QOpenGLFunctions_4_5_Core::glCompileShader;
+    using QOpenGLFunctions_4_5_Core::glCreateProgram;
+    using QOpenGLFunctions_4_5_Core::glCreateShader;
+    using QOpenGLFunctions_4_5_Core::glDeleteBuffers;
+    using QOpenGLFunctions_4_5_Core::glDeleteProgram;
+    using QOpenGLFunctions_4_5_Core::glDeleteShader;
+    using QOpenGLFunctions_4_5_Core::glDeleteVertexArrays;
+    using QOpenGLFunctions_4_5_Core::glDrawArrays;
+    using QOpenGLFunctions_4_5_Core::glEnable;
+    using QOpenGLFunctions_4_5_Core::glEnableVertexAttribArray;
+    using QOpenGLFunctions_4_5_Core::glGenBuffers;
+    using QOpenGLFunctions_4_5_Core::glGenVertexArrays;
+    using QOpenGLFunctions_4_5_Core::glGetUniformLocation;
+    using QOpenGLFunctions_4_5_Core::glLineWidth;
+    using QOpenGLFunctions_4_5_Core::glLinkProgram;
+    using QOpenGLFunctions_4_5_Core::glShaderSource;
+    using QOpenGLFunctions_4_5_Core::glUniform1i;
+    using QOpenGLFunctions_4_5_Core::glUniform4f;
+    using QOpenGLFunctions_4_5_Core::glUniformMatrix3fv;
+    using QOpenGLFunctions_4_5_Core::glUniformMatrix4fv;
+    using QOpenGLFunctions_4_5_Core::glUseProgram;
+    using QOpenGLFunctions_4_5_Core::glVertexAttribPointer;
+    using QOpenGLFunctions_4_5_Core::glViewport;
+
     GLuint shader_program_id = 0;   // OpenGL shader program ID (compiled+linked GLSL program); it identifies the linked vertex + fragment shader pair used for rendering
     GLint uniform_location_mvp = -1;    // Uniform location for MVP matrix (cached after link)
     GLint uniform_location_color = -1;  // Uniform location for per-draw color (cached after link)
+    GLint uniform_location_model = -1;
+    GLint uniform_location_normal_matrix = -1;
+    GLint uniform_location_color_mode = -1;
 
     // Raw GL objects
     GLuint vertex_array_object = 0;   // Vertex Array Object handle
@@ -71,6 +124,7 @@ private:
     bool rotating = false;   // LMB: orbit camera
     bool panning  = false;   // RMB: pan camera
     bool scrolling_navigation_ = false;
+    ColorMode color_mode_ = ColorMode::Uniform;
 
     void emit_camera_state();
     [[nodiscard]] glm::mat4 build_view_matrix() const;
@@ -78,9 +132,9 @@ private:
 
     void setup_shaders();   // Create, compile, link shaders; fetch uniform locations
     void setup_geometry();  // Create VAO/VBO and upload unit-cube vertex data
-    void draw_cube(const glm::mat4 &model, const glm::vec4 &color);  // Set uniforms and draw 36 vertices for one cube
+    void draw_cube(const glm::mat4 &model, const glm::vec4 &color, ColorMode mode);  // Set uniforms and draw 36 vertices for one cube
     void draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color);
-    void draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color);
+    void draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color, ColorMode mode);
     void delete_imported_objects();
     [[nodiscard]] bool compute_ray(const QPoint &position, glm::vec3 &origin, glm::vec3 &direction) const;
     [[nodiscard]] bool intersect_ground_plane(const QPoint &position, glm::vec3 &hit_point) const;
@@ -97,17 +151,6 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent*) override;
     void wheelEvent(QWheelEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
-
-public:
-    explicit View(QWidget *parent = nullptr);   // Constructor
-    ~View() override;   // Destructor
-
-    // Quick setters used by the toolbar (apply + repaint)
-    void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; emit_camera_state(); update(); }
-    void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; emit_camera_state(); update(); }
-    bool load_object(const QString &file_path);
-
-    void reset_all();
 };
 
 

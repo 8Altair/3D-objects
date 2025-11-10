@@ -4,6 +4,7 @@
 #include <QMainWindow>  // Qt base class for main application windows
 #include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
 
 
 QT_BEGIN_NAMESPACE  // Begin Qt namespace block (matches ui header style)
@@ -24,6 +25,7 @@ class MainWindow final : public QMainWindow // Main window class that publicly i
     QLineEdit *camera_rotation_y_line_edit_{nullptr};
     QLineEdit *camera_rotation_z_line_edit_{nullptr};
     QLabel *help_label_{nullptr};
+    QComboBox *color_mode_combo_box_{nullptr};
 
 public:
     explicit MainWindow(QWidget *parent = nullptr); // Constructor; "explicit" avoids implicit conversions
