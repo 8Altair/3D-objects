@@ -223,14 +223,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     help_tool_bar->setMovable(false);
 
     help_tool_bar->addSeparator();
-    auto *color_source_label = new QLabel("Color source:", help_tool_bar);
+    auto color_source_label = std::make_unique<QLabel>("Color source:", help_tool_bar);
     {
         QFont f = color_source_label->font();
         f.setPointSizeF(f.pointSizeF() * 1.05);
         color_source_label->setFont(f);
     }
     color_source_label->setStyleSheet("padding:0 4px;");
-    help_tool_bar->addWidget(color_source_label);
+    help_tool_bar->addWidget(color_source_label.release());
 
     color_mode_combo_box_ = new QComboBox(help_tool_bar);
     color_mode_combo_box_->addItems({QStringLiteral("Uniform"),
