@@ -26,6 +26,11 @@ class View final : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core // 
 {
     Q_OBJECT
 
+signals:
+    void cameraPositionChanged(float x, float y, float z);
+    void cameraRotationChanged(float x, float y, float z);
+
+private:
     GLuint shader_program_id = 0;   // OpenGL shader program ID (compiled+linked GLSL program); it identifies the linked vertex + fragment shader pair used for rendering
     GLint uniform_location_mvp = -1;    // Uniform location for MVP matrix (cached after link)
     GLint uniform_location_color = -1;  // Uniform location for per-draw color (cached after link)
@@ -44,6 +49,7 @@ class View final : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core // 
     bool rotating = false;   // LMB: orbit camera
     bool panning  = false;   // RMB: pan camera
 
+    void emit_camera_state();
     [[nodiscard]] glm::mat4 build_view_matrix() const;
     void update_projection(int w, int h);
 
@@ -67,8 +73,8 @@ public:
     ~View() override;   // Destructor
 
     // Quick setters used by the toolbar (apply + repaint)
-    void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; update(); }
-    void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; update(); }
+    void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; emit_camera_state(); update(); }
+    void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; emit_camera_state(); update(); }
 
     void reset_all();
 };

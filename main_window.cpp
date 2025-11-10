@@ -6,8 +6,6 @@
 #include <QAction>
 #include <QLabel>
 #include <QLineEdit>
-#include <QWidget>
-#include <QSizePolicy>
 #include <QDoubleValidator>
 #include <QLocale>
 
@@ -26,12 +24,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // Toolbar 1: Controls
     QToolBar* tool_bar = addToolBar("Controls");
     tool_bar->setMovable(false);
-    tool_bar->setStyleSheet("QToolBar { spacing: 10px; }");
-
-    auto *left_spacer = new QWidget(tool_bar);
-    left_spacer->setFixedWidth(16);
-    left_spacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    tool_bar->addWidget(left_spacer);
+    tool_bar->setStyleSheet("QToolBar { spacing: 10px; padding-left: 16px; }");
 
     const auto create_double_line_edit = [tool_bar](const QString& text, const int width)
     {
@@ -126,6 +119,30 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(camera_rotation_x_line_edit_, &QLineEdit::returnPressed, apply_camera_rotation);
     connect(camera_rotation_y_line_edit_, &QLineEdit::returnPressed, apply_camera_rotation);
     connect(camera_rotation_z_line_edit_, &QLineEdit::returnPressed, apply_camera_rotation);
+
+    connect(scene, &View::cameraPositionChanged, this,
+            [this](const float x, const float y, const float z)
+            {
+                const auto format = [](const float value)
+                {
+                    return QLocale::c().toString(value, 'f', 3);
+                };
+                camera_position_x_line_edit_->setText(format(x));
+                camera_position_y_line_edit_->setText(format(y));
+                camera_position_z_line_edit_->setText(format(z));
+            });
+
+    connect(scene, &View::cameraRotationChanged, this,
+            [this](const float x, const float y, const float z)
+            {
+                const auto format = [](const float value)
+                {
+                    return QLocale::c().toString(value, 'f', 1);
+                };
+                camera_rotation_x_line_edit_->setText(format(x));
+                camera_rotation_y_line_edit_->setText(format(y));
+                camera_rotation_z_line_edit_->setText(format(z));
+            });
 
     // Toolbar 2: Help (full-width below)
     addToolBarBreak();  // Place next toolbar on a new row

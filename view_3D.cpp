@@ -50,6 +50,12 @@ glm::mat4 View::build_view_matrix() const
     return V;
 }
 
+void View::emit_camera_state()
+{
+    emit cameraPositionChanged(cam_position.x, cam_position.y, cam_position.z);
+    emit cameraRotationChanged(cam_rotation_degree.x, cam_rotation_degree.y, cam_rotation_degree.z);
+}
+
 void View::update_projection(const int w, const int h)
 {
     const float aspect = h > 0 ? static_cast<float>(w)/static_cast<float>(h) : 1.0f;
@@ -105,6 +111,7 @@ void View::mouseMoveEvent(QMouseEvent* event)
     {
         cam_rotation_degree.y += 0.3f * dx;
         cam_rotation_degree.x += 0.3f * dy;
+        emit_camera_state();
         update(); return;
     }
 
@@ -119,6 +126,7 @@ void View::mouseMoveEvent(QMouseEvent* event)
             cam_position.x +=  0.01f * dx;
             cam_position.z +=  0.01f * dy;
         }
+        emit_camera_state();
         update();
     }
 }
@@ -127,6 +135,7 @@ void View::wheelEvent(QWheelEvent* event)
 {
     const float steps = static_cast<float>(event->angleDelta().y()) / 120.0f;
     cam_position.z += -0.5f * steps;
+    emit_camera_state();
     update();
 }
 
@@ -155,6 +164,7 @@ void View::keyPressEvent(QKeyEvent* event)
 
         default: return;
     }
+    emit_camera_state();
     update();
 }
 
@@ -163,6 +173,7 @@ void View::reset_all()
     cam_position = {3.0f, 3.5f, 12.5f};
     cam_rotation_degree = {-15.0f, 15.0f, 0.0f};
     update_projection(width(), height());
+    emit_camera_state();
     update();
 }
 
