@@ -6,11 +6,19 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
+#include <glm/gtc/matrix_inverse.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
 
+namespace {
+constexpr float kGroundPlaneY = -2.0f + 0.15f;
+constexpr float kGroundExtent = 12.0f;
+constexpr float kMinObjectScale = 0.25f;
+constexpr float kMaxObjectScale = 8.0f;
+}
 
 View::View(QWidget *parent) : QOpenGLWidget(parent)
 {
@@ -95,10 +103,9 @@ void View::paintGL()
 
     // Ground plane
     {
-        constexpr float ground_extent = 12.0f;
         glm::mat4 Mg(1.0f);
         Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Slightly below origin
-        Mg = glm::scale(Mg, glm::vec3(ground_extent, 0.30f, ground_extent));
+        Mg = glm::scale(Mg, glm::vec3(kGroundExtent, 0.30f, kGroundExtent));
         draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f));
         glLineWidth(2.0f);
         draw_cube_edges(Mg, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -108,9 +115,10 @@ void View::paintGL()
     int object_index = 0;
     for (const auto &object : imported_objects_)
     {
-        const float r = 0.6f + 0.15f * static_cast<float>(object_index % 3);
-        const float g = 0.65f + 0.12f * static_cast<float>((object_index + 1) % 3);
-        constexpr float b = 0.75f;
+        const bool is_selected = object_index == selected_object_index_;
+        const float r = is_selected ? 0.95f : 0.6f + 0.15f * static_cast<float>(object_index % 3);
+        const float g = is_selected ? 0.85f : 0.65f + 0.12f * static_cast<float>((object_index + 1) % 3);
+        const float b = is_selected ? 0.35f : 0.75f;
         glm::mat4 model = glm::translate(glm::mat4(1.0f), object.translation);
         draw_mesh(object, model, glm::vec4(r, g, b, 1.0f));
         object_index++;
@@ -124,28 +132,136 @@ void View::mousePressEvent(QMouseEvent* event)
 {
     setFocus(Qt::MouseFocusReason);
     last_mouse = event->pos();
-    rotating = event->button() == Qt::LeftButton;
-    panning  = event->button() == Qt::RightButton;
+
+    if (event->button() == Qt::RightButton)
+    {
+        if (selected_object_index_ >= 0 && selected_object_index_ < static_cast<int>(imported_objects_.size()))
+        {
+            if (glm::vec3 hit; intersect_ground_plane(event->pos(), hit))
+            {
+                dragging_object_ = true;
+                drag_offset_ = imported_objects_[selected_object_index_].translation - hit;
+            }
+            else
+            {
+                dragging_object_ = false;
+                panning = true;
+            }
+        }
+        else
+        {
+            panning = true;
+        }
+        return;
+    }
+
+    if (event->button() == Qt::LeftButton)
+    {
+        if (selected_object_index_ >= 0 && selected_object_index_ < static_cast<int>(imported_objects_.size()))
+        {
+            if (const int hit_index = pick_object(event->pos()); hit_index < 0)
+            {
+                selected_object_index_ = -1;
+                focus_point_ = {0.0f, 0.0f, 0.0f};
+                update();
+            }
+        }
+        rotating = true;
+        return;
+    }
+
+    if (event->button() == Qt::MiddleButton)
+    {
+        scrolling_navigation_ = true;
+    }
 }
-void View::mouseReleaseEvent(QMouseEvent*) { rotating = panning = false; }
+
+void View::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        rotating = false;
+        return;
+    }
+
+    if (event->button() == Qt::RightButton)
+    {
+        if (dragging_object_)
+        {
+            dragging_object_ = false;
+        }
+        else
+        {
+            panning = false;
+        }
+        return;
+    }
+
+    if (event->button() == Qt::MiddleButton)
+    {
+        scrolling_navigation_ = false;
+    }
+}
 
 void View::mouseMoveEvent(QMouseEvent* event)
 {
     const QPoint distance = event->pos() - last_mouse;
     last_mouse = event->pos();
 
+    if (dragging_object_ && selected_object_index_ >= 0 &&
+        selected_object_index_ < static_cast<int>(imported_objects_.size()))
+    {
+        if (glm::vec3 hit; intersect_ground_plane(event->pos(), hit))
+        {
+            auto &object = imported_objects_[selected_object_index_];
+            glm::vec3 new_translation = hit + drag_offset_;
+            new_translation.y = kGroundPlaneY;
+            object.translation = new_translation;
+            update();
+        }
+        return;
+    }
+
     const auto dx = static_cast<float>(distance.x());
     const auto dy = static_cast<float>(distance.y());
+
+    if (scrolling_navigation_)
+    {
+        constexpr float orbit_speed = 0.005f;
+        glm::vec3 offset = cam_position - focus_point_;
+        constexpr float min_radius = 0.25f;
+        const float radius = std::max(glm::length(offset), min_radius);
+
+        float yaw = glm::radians(cam_rotation_degree.y);
+        float pitch = glm::radians(cam_rotation_degree.x);
+
+        yaw -= dx * orbit_speed;
+        pitch += dy * orbit_speed;
+        pitch = std::clamp(pitch, -glm::radians(85.0f), glm::radians(85.0f));
+
+        const float cos_pitch = std::cos(pitch);
+        offset.x = radius * std::sin(yaw) * cos_pitch;
+        offset.y = radius * std::sin(pitch);
+        offset.z = radius * std::cos(yaw) * cos_pitch;
+
+        cam_position = focus_point_ + offset;
+        cam_rotation_degree.y = glm::degrees(yaw);
+        cam_rotation_degree.x = glm::degrees(pitch);
+        emit_camera_state();
+        update();
+        return;
+    }
 
     if (rotating)   // Orbit camera
     {
         cam_rotation_degree.y += 0.3f * dx;
         cam_rotation_degree.x += 0.3f * dy;
         emit_camera_state();
-        update(); return;
+        update();
+        return;
     }
 
-    if (panning)    // Pan camera (XZ plane; hold Shift for Y)
+    if (panning)    // Pan camera (XZ plane; hold Shift for vertical)
     {
         if (event->modifiers() & Qt::ShiftModifier)
         {
@@ -161,9 +277,40 @@ void View::mouseMoveEvent(QMouseEvent* event)
     }
 }
 
+void View::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        if (const int hit_index = pick_object(event->pos()); hit_index >= 0)
+        {
+            selected_object_index_ = hit_index;
+            focus_point_ = imported_objects_[hit_index].translation;
+            dragging_object_ = false;
+            rotating = false;
+            update();
+            return;
+        }
+    }
+    QOpenGLWidget::mouseDoubleClickEvent(event);
+}
+
 void View::wheelEvent(QWheelEvent* event)
 {
     const float steps = static_cast<float>(event->angleDelta().y()) / 120.0f;
+    if (std::abs(steps) < std::numeric_limits<float>::epsilon())
+    {
+        return;
+    }
+
+    if (selected_object_index_ >= 0 && selected_object_index_ < static_cast<int>(imported_objects_.size()))
+    {
+        auto &object = imported_objects_[selected_object_index_];
+        const float factor = std::pow(1.1f, steps);
+        object.scale = std::clamp(object.scale * factor, kMinObjectScale, kMaxObjectScale);
+        update();
+        return;
+    }
+
     cam_position.z += -0.5f * steps;
     emit_camera_state();
     update();
@@ -206,6 +353,12 @@ void View::reset_all()
 
     cam_position = {3.0f, 3.5f, 15.0f};
     cam_rotation_degree = {-15.0f, 15.0f, 0.0f};
+    selected_object_index_ = -1;
+    dragging_object_ = false;
+    rotating = false;
+    panning = false;
+    scrolling_navigation_ = false;
+    focus_point_ = {0.0f, 0.0f, 0.0f};
     update_projection(width(), height());
     emit_camera_state();
     update();
@@ -243,6 +396,7 @@ bool View::load_object(const QString &file_path)
     float max_x = std::numeric_limits<float>::lowest();
     float max_y = std::numeric_limits<float>::lowest();
     float max_z = std::numeric_limits<float>::lowest();
+    float max_radius_sq = 0.0f;
 
     for (unsigned int faceIndex(0); faceIndex < mesh->mNumFaces; faceIndex++)
     {
@@ -266,6 +420,9 @@ bool View::load_object(const QString &file_path)
             vertices.push_back(vertex.x);
             vertices.push_back(vertex.y);
             vertices.push_back(vertex.z);
+
+            const float radius_sq = vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z;
+            max_radius_sq = std::max(max_radius_sq, radius_sq);
         }
     }
 
@@ -286,7 +443,8 @@ bool View::load_object(const QString &file_path)
 
     ImportedObject object;
     object.vertex_count = static_cast<GLsizei>(vertices.size() / 3);
-    object.footprint = std::max({1.0f, max_x - min_x, max_z - min_z}) + 0.5f;
+    object.base_footprint = std::max({1.0f, max_x - min_x, max_z - min_z}) + 0.5f;
+    object.radius = std::sqrt(max_radius_sq);
 
     makeCurrent();
 
@@ -303,23 +461,25 @@ bool View::load_object(const QString &file_path)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    constexpr float ground_top = -2.0f + 0.15f;
-    glm::vec3 desired_translation{0.0f, ground_top, 0.0f};
+    glm::vec3 desired_translation{0.0f, kGroundPlaneY, 0.0f};
 
-    const auto overlaps = [this](const glm::vec3 &position)
+    const auto overlaps = [this, &object](const glm::vec3 &position)
     {
         constexpr float epsilon = 0.05f;
+        const float new_radius = object.base_footprint * object.scale * 0.5f;
         return std::ranges::any_of(imported_objects_,
                                    [&](const ImportedObject &existing)
                                    {
-                                       return std::abs(existing.translation.x - position.x) < epsilon &&
-                                           std::abs(existing.translation.z - position.z) < epsilon;
+                                       const float existing_radius = existing.base_footprint * existing.scale * 0.5f;
+                                       const glm::vec2 delta(existing.translation.x - position.x,
+                                                             existing.translation.z - position.z);
+                                       return glm::length(delta) < existing_radius + new_radius + epsilon;
                                    });
     };
 
     while (overlaps(desired_translation))
     {
-        desired_translation.x += object.footprint;
+        desired_translation.x += object.base_footprint * object.scale;
     }
 
     object.translation = desired_translation;
@@ -346,6 +506,8 @@ void View::delete_imported_objects()
         }
     }
     imported_objects_.clear();
+    selected_object_index_ = -1;
+    dragging_object_ = false;
 }
 
 void View::setup_shaders()
@@ -532,10 +694,84 @@ void View::draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color)
 void View::draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color)
 {
     if (object.vertex_count <= 0) return;
-    const glm::mat4 mvp = projection * view_matrix * model;
+    const glm::mat4 scaled_model = glm::scale(model, glm::vec3(object.scale));
+    const glm::mat4 mvp = projection * view_matrix * scaled_model;
     glBindVertexArray(object.vao);
     glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
     glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
     glDrawArrays(GL_TRIANGLES, 0, object.vertex_count);
     glBindVertexArray(0);
+}
+
+bool View::compute_ray(const QPoint &position, glm::vec3 &origin, glm::vec3 &direction) const
+{
+    if (width() <= 0 || height() <= 0) return false;
+
+    const float ndc_x = 2.0f * static_cast<float>(position.x()) / static_cast<float>(width()) - 1.0f;
+    const float ndc_y = 1.0f - 2.0f * static_cast<float>(position.y()) / static_cast<float>(height());
+
+    const glm::vec4 ray_clip(ndc_x, ndc_y, -1.0f, 1.0f);
+    const glm::mat4 inverse_projection = glm::inverse(projection);
+    glm::vec4 ray_eye = inverse_projection * ray_clip;
+    ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0f, 0.0f);
+
+    const glm::mat4 inverse_view = glm::inverse(build_view_matrix());
+    const glm::vec4 ray_world = inverse_view * ray_eye;
+    direction = glm::normalize(glm::vec3(ray_world));
+    origin = cam_position;
+    return true;
+}
+
+bool View::intersect_ground_plane(const QPoint &position, glm::vec3 &hit_point) const
+{
+    glm::vec3 origin, direction;
+    if (!compute_ray(position, origin, direction)) return false;
+
+    const float denom = direction.y;
+    if (std::abs(denom) < 1e-4f) return false;
+
+    const float t = (kGroundPlaneY - origin.y) / denom;
+    if (t < 0.0f) return false;
+
+    hit_point = origin + t * direction;
+    hit_point.y = kGroundPlaneY;
+    return true;
+}
+
+int View::pick_object(const QPoint &position) const
+{
+    glm::vec3 origin, direction;
+    if (!compute_ray(position, origin, direction)) return -1;
+
+    int best_index = -1;
+    float closest_t = std::numeric_limits<float>::max();
+
+    for (std::size_t i = 0; i < imported_objects_.size(); ++i)
+    {
+        const auto &object = imported_objects_[i];
+        const glm::vec3 center = object.translation;
+        const float radius = object.radius * object.scale;
+        const glm::vec3 oc = origin - center;
+
+        const float a = glm::dot(direction, direction);
+        const float b = 2.0f * glm::dot(oc, direction);
+        const float c = glm::dot(oc, oc) - radius * radius;
+        const float discriminant = b * b - 4.0f * a * c;
+        if (discriminant < 0.0f) continue;
+
+        const float sqrt_discriminant = std::sqrt(discriminant);
+        float t = (-b - sqrt_discriminant) / (2.0f * a);
+        if (t < 0.0f)
+        {
+            t = (-b + sqrt_discriminant) / (2.0f * a);
+        }
+        if (t < 0.0f) continue;
+        if (t < closest_t)
+        {
+            closest_t = t;
+            best_index = static_cast<int>(i);
+        }
+    }
+
+    return best_index;
 }

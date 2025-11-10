@@ -40,7 +40,9 @@ private:
         GLuint vbo = 0;
         GLsizei vertex_count = 0;
         glm::vec3 translation{};
-        float footprint = 1.0f;
+        float base_footprint = 1.0f;
+        float radius = 1.0f;
+        float scale = 1.0f;
     };
 
     GLuint shader_program_id = 0;   // OpenGL shader program ID (compiled+linked GLSL program); it identifies the linked vertex + fragment shader pair used for rendering
@@ -54,16 +56,21 @@ private:
     GLuint edge_vertex_buffer_object = 0;  // Wireframe VBO
 
     std::vector<ImportedObject> imported_objects_;
+    int selected_object_index_ = -1;
+    bool dragging_object_ = false;
+    glm::vec3 drag_offset_{};
 
     glm::mat4 projection{};  // Projection matrix
     glm::mat4 view_matrix{}; // View matrix (camera)
 
     glm::vec3 cam_position = {3.0f, 3.5f, 15.0f};      // Camera position
     glm::vec3 cam_rotation_degree = { -15.0f, 15.0f, 0.0f }; // pitch,yaw,roll (deg), small tilt
+    glm::vec3 focus_point_{0.0f, 0.0f, 0.0f};
 
     QPoint last_mouse;
     bool rotating = false;   // LMB: orbit camera
     bool panning  = false;   // RMB: pan camera
+    bool scrolling_navigation_ = false;
 
     void emit_camera_state();
     [[nodiscard]] glm::mat4 build_view_matrix() const;
@@ -75,6 +82,9 @@ private:
     void draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color);
     void draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color);
     void delete_imported_objects();
+    [[nodiscard]] bool compute_ray(const QPoint &position, glm::vec3 &origin, glm::vec3 &direction) const;
+    [[nodiscard]] bool intersect_ground_plane(const QPoint &position, glm::vec3 &hit_point) const;
+    [[nodiscard]] int pick_object(const QPoint &position) const;
 
 protected:
     void initializeGL() override;   // Called once: load GL functions, create buffers/shaders, states
@@ -84,6 +94,7 @@ protected:
     void mousePressEvent(QMouseEvent*) override;
     void mouseReleaseEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
+    void mouseDoubleClickEvent(QMouseEvent*) override;
     void wheelEvent(QWheelEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
 
