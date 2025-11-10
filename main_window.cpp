@@ -6,10 +6,9 @@
 #include <QAction>
 #include <QLabel>
 #include <QLineEdit>
-#include <QComboBox>
-#include <QCheckBox>
+#include <QWidget>
+#include <QSizePolicy>
 #include <QDoubleValidator>
-#include <QHBoxLayout>
 #include <QLocale>
 
 #include <limits>
@@ -28,6 +27,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     QToolBar* tool_bar = addToolBar("Controls");
     tool_bar->setMovable(false);
     tool_bar->setStyleSheet("QToolBar { spacing: 10px; }");
+
+    auto *left_spacer = new QWidget(tool_bar);
+    left_spacer->setFixedWidth(16);
+    left_spacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    tool_bar->addWidget(left_spacer);
 
     const auto create_double_line_edit = [tool_bar](const QString& text, const int width)
     {
@@ -75,22 +79,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     {
         scene->reset_all();
 
-        pyramid_scale_line_edit_->setText("1.0");
-        shear_theta_line_edit_->setText("0");
-        shear_phi_line_edit_->setText("0");
-        shear_plane_combo_box_->setCurrentIndex(0);
-        projection_check_box_->setChecked(true);
-
-        pyramid_rotation_x_line_edit_->setText("0");
-        pyramid_rotation_y_line_edit_->setText("0");
-        pyramid_rotation_z_line_edit_->setText("0");
-
-        pyramid_position_x_line_edit_->setText("0");
-        pyramid_position_y_line_edit_->setText("0");
-        pyramid_position_z_line_edit_->setText("0");
-
-        camera_position_x_line_edit_->setText("0.0");
-        camera_position_y_line_edit_->setText("2.5");
+        camera_position_x_line_edit_->setText("3.0");
+        camera_position_y_line_edit_->setText("3.5");
         camera_position_z_line_edit_->setText("12.5");
 
         camera_rotation_x_line_edit_->setText("-15");
@@ -98,90 +88,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         camera_rotation_z_line_edit_->setText("0");
     });
 
-    // Scale
     tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Scale:", tool_bar));
-    pyramid_scale_line_edit_ = create_double_line_edit("1.0", 60);
-    tool_bar->addWidget(pyramid_scale_line_edit_);
-    connect(pyramid_scale_line_edit_, &QLineEdit::returnPressed, [this, scene, read_float]
-        { scene->set_pyramid_scale(read_float(pyramid_scale_line_edit_)); });
-
-    // Shear θ / φ
-    tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("θ:", tool_bar));
-    shear_theta_line_edit_ = create_double_line_edit("0", 60);
-    tool_bar->addWidget(shear_theta_line_edit_);
-    connect(shear_theta_line_edit_, &QLineEdit::returnPressed, [this, scene, read_float]
-        { scene->set_shear_theta(read_float(shear_theta_line_edit_)); });
-
-    tool_bar->addWidget(new QLabel("  φ:", tool_bar));
-    shear_phi_line_edit_ = create_double_line_edit("0", 60);
-    tool_bar->addWidget(shear_phi_line_edit_);
-    connect(shear_phi_line_edit_, &QLineEdit::returnPressed, [this, scene, read_float]
-        { scene->set_shear_phi(read_float(shear_phi_line_edit_)); });
-
-    // Shear plane
-    tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Shear plane:", tool_bar));
-    shear_plane_combo_box_ = new QComboBox(tool_bar);
-    shear_plane_combo_box_->addItems({"XY", "XZ", "YZ"});
-    tool_bar->addWidget(shear_plane_combo_box_);
-    connect(shear_plane_combo_box_, &QComboBox::currentIndexChanged,
-            this, [scene](const int idx){ scene->set_shear_plane_index(idx); });
-
-    // Projection toggle
-    tool_bar->addSeparator();
-    projection_check_box_ = new QCheckBox("Perspective", tool_bar);
-    projection_check_box_->setChecked(true);
-    tool_bar->addWidget(projection_check_box_);
-    connect(projection_check_box_, &QCheckBox::toggled,
-            this, [scene](const bool on){ scene->set_use_perspective(on); });
-
-    // Pyramid rotation editors
-    tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Pyr Rot x,y,z:", tool_bar));
-    pyramid_rotation_x_line_edit_ = create_double_line_edit("0", 50);
-    pyramid_rotation_y_line_edit_ = create_double_line_edit("0", 50);
-    pyramid_rotation_z_line_edit_ = create_double_line_edit("0", 50);
-    tool_bar->addWidget(pyramid_rotation_x_line_edit_);
-    tool_bar->addWidget(pyramid_rotation_y_line_edit_);
-    tool_bar->addWidget(pyramid_rotation_z_line_edit_);
-    const auto apply_pyramid_rotation = [this, scene, read_float]
-    {
-        scene->set_pyramid_rotation(
-            read_float(pyramid_rotation_x_line_edit_),
-            read_float(pyramid_rotation_y_line_edit_),
-            read_float(pyramid_rotation_z_line_edit_));
-    };
-    connect(pyramid_rotation_x_line_edit_, &QLineEdit::returnPressed, apply_pyramid_rotation);
-    connect(pyramid_rotation_y_line_edit_, &QLineEdit::returnPressed, apply_pyramid_rotation);
-    connect(pyramid_rotation_z_line_edit_, &QLineEdit::returnPressed, apply_pyramid_rotation);
-
-    // Pyramid position editors
-    tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Pyr Pos x,y,z:", tool_bar));
-    pyramid_position_x_line_edit_ = create_double_line_edit("0", 50);
-    pyramid_position_y_line_edit_ = create_double_line_edit("0", 50);
-    pyramid_position_z_line_edit_ = create_double_line_edit("0", 50);
-    tool_bar->addWidget(pyramid_position_x_line_edit_);
-    tool_bar->addWidget(pyramid_position_y_line_edit_);
-    tool_bar->addWidget(pyramid_position_z_line_edit_);
-    const auto apply_pyramid_position = [this, scene, read_float]
-    {
-        scene->set_pyramid_position(
-            read_float(pyramid_position_x_line_edit_),
-            read_float(pyramid_position_y_line_edit_),
-            read_float(pyramid_position_z_line_edit_));
-    };
-    connect(pyramid_position_x_line_edit_, &QLineEdit::returnPressed, apply_pyramid_position);
-    connect(pyramid_position_y_line_edit_, &QLineEdit::returnPressed, apply_pyramid_position);
-    connect(pyramid_position_z_line_edit_, &QLineEdit::returnPressed, apply_pyramid_position);
-
-    // Camera position editors
-    tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Cam Pos x,y,z:", tool_bar));
-    camera_position_x_line_edit_ = create_double_line_edit("0.0", 55);
-    camera_position_y_line_edit_ = create_double_line_edit("2.5", 55);
+    tool_bar->addWidget(new QLabel("Camera position (x, y, z):", tool_bar));
+    camera_position_x_line_edit_ = create_double_line_edit("3.0", 55);
+    camera_position_y_line_edit_ = create_double_line_edit("3.5", 55);
     camera_position_z_line_edit_ = create_double_line_edit("12.5", 55);
     tool_bar->addWidget(camera_position_x_line_edit_);
     tool_bar->addWidget(camera_position_y_line_edit_);
@@ -199,7 +109,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Camera rotation editors
     tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Cam Rot x,y,z:", tool_bar));
+    tool_bar->addWidget(new QLabel("Camera rotation (x, y, z):", tool_bar));
     camera_rotation_x_line_edit_ = create_double_line_edit("-15", 55);
     camera_rotation_y_line_edit_ = create_double_line_edit("15", 55);
     camera_rotation_z_line_edit_ = create_double_line_edit("0", 55);
@@ -223,12 +133,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     QToolBar* help_tool_bar = addToolBar("Help");
     help_tool_bar->setMovable(false);
 
-    const QString helpText =
-        "LMB: Rotate   |   RMB (+Shift): Move   |   Wheel: Scale\n"
-        "Ctrl+Wheel: Shear θ   |   Shift+Wheel: Shear φ   |   "
-        "W/A/S/D,R/F: Move Cam   |   I/K,J/L,U/O: Rotate Cam   |   P: Toggle Projection";
+    const QString help_text =
+        "Left mouse button: Orbit camera   |   Right mouse button (+Shift): Pan   |   Mouse wheel: Dolly\n"
+        "W/A/S/D, R/F: Move camera   |   I/K, J/L, U/O: Rotate camera";
 
-    help_label_ = new QLabel(helpText, help_tool_bar);
+    help_label_ = new QLabel(help_text, help_tool_bar);
     help_label_->setWordWrap(true);
     help_label_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 

@@ -53,67 +53,13 @@ glm::mat4 View::build_view_matrix() const
 void View::update_projection(const int w, const int h)
 {
     const float aspect = h > 0 ? static_cast<float>(w)/static_cast<float>(h) : 1.0f;
-    if (use_perspective)
-    {
-        projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-    }
-    else
-    {
-        const float half_h = 4.0f, half_w = aspect * half_h;
-        projection = glm::ortho(-half_w, half_w, -half_h, half_h, -100.0f, 100.0f);
-    }
+    projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
 }
 
 void View::resizeGL(const int w, const int h)
 {
     glViewport(0,0,w,h);
     update_projection(w,h);
-}
-
-glm::mat4 View::build_shear_matrix() const
-{
-    // Angles are in degrees; use cot = cos/sin. If sin≈0, treat as 0 to avoid blow-up.
-    auto cot = [](const float degrees) -> float
-    {
-        const float radians = glm::radians(degrees);
-        const float sine = glm::sin(radians);
-        if (glm::abs(sine) < 1e-6f) return 0.0f;
-        return glm::cos(radians) / sine;
-    };
-
-    const float cot_theta = cot(shear_theta_degree);
-    const float cot_phi = cot(shear_phi_degree);
-
-    glm::mat4 H(1.0f);
-    switch (shear_plane)
-    {
-        case ShearPlane::XY:    // Shear vs Z: x+=ct*z, y+=cp*z
-            H[2][0] = 0.0f; H[0][2] = cot_theta;    // m[0][2]
-            H[2][1] = 0.0f; H[1][2] = cot_phi;  // m[1][2]
-            break;
-        case ShearPlane::XZ: // Shear vs Y: x+=ct*y, z+=cp*y
-            H[1][0] = 0.0f; H[0][1] = cot_theta;
-            H[1][2] = 0.0f; H[2][1] = cot_phi;
-            break;
-        case ShearPlane::YZ:    // Shear vs X: y+=ct*x, z+=cp*x
-            H[0][1] = 0.0f; H[1][0] = cot_theta;
-            H[0][2] = 0.0f; H[2][0] = cot_phi;
-            break;
-    }
-    return H;
-}
-
-// Mp = T * Rz * Ry * Rx * H * S   (so S then H then R then T are applied to points)
-glm::mat4 View::build_pyramid_Mp() const
-{
-    const glm::mat4 S  = glm::scale(glm::mat4(1.0f), glm::vec3(pyramid_scale));
-    const glm::mat4 H  = build_shear_matrix();
-    const glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), glm::radians(pyramid_rotation_degree.x), glm::vec3(1,0,0));
-    const glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), glm::radians(pyramid_rotation_degree.y), glm::vec3(0,1,0));
-    const glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), glm::radians(pyramid_rotation_degree.z), glm::vec3(0,0,1));
-    const glm::mat4 T  = glm::translate(glm::mat4(1.0f), pyramid_position);
-
-    return T * Rz * Ry * Rx * H * S;
 }
 
 void View::paintGL()
@@ -126,43 +72,13 @@ void View::paintGL()
     // Update camera matrix every frame (allows live control)
     view_matrix = build_view_matrix();
 
-    // Ground: reuse cube VBO, shrink in Y
+    // Ground plane
     {
         glm::mat4 Mg(1.0f);
-        Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Place below pyramid
-        Mg = glm::scale(Mg, glm::vec3(8.0f, 0.10f, 8.0f));      // Thin and wide
-        draw_cube(Mg, glm::vec4(0.55f, 0.55f, 0.55f, 1.0f));
+        Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Slightly below origin
+        Mg = glm::scale(Mg, glm::vec3(8.0f, 0.30f, 8.0f));
+        draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f));
     }
-
-    // Pyramid: 4-3-1 cubes, all via one VBO
-    const glm::mat4 Mp = build_pyramid_Mp();
-
-    auto Mk_at_position = [](const float x, const float y, const float z)
-    {
-        return glm::translate(glm::mat4(1.0f), glm::vec3(x,y,z));
-    };
-
-    // Layout params
-    constexpr float size = 1.0f;      // Cube size (unit)
-    constexpr float gap = 0.00f;   // Tiny spacing
-    constexpr float D = size + gap;   // Spacing per axis
-    constexpr float base_y = -1.5f;
-
-    // Base row (4)
-    draw_cube(Mp * Mk_at_position(-1.5f*D, base_y, 0.0f), glm::vec4(1.00f,0.20f,0.20f,1));
-    draw_cube(Mp * Mk_at_position(-0.5f*D, base_y, 0.0f), glm::vec4(0.20f,1.00f,0.20f,1));
-    draw_cube(Mp * Mk_at_position( 0.5f*D, base_y, 0.0f), glm::vec4(0.20f,0.60f,1.00f,1));
-    draw_cube(Mp * Mk_at_position( 1.5f*D, base_y, 0.0f), glm::vec4(1.00f,0.60f,0.20f,1));
-
-    // 2nd row (3)
-    constexpr float y2 = base_y + D;
-    draw_cube(Mp * Mk_at_position(-1.0f*D, y2, 0.0f), glm::vec4(0.80f,0.20f,1.00f,1));
-    draw_cube(Mp * Mk_at_position( 0.0f*D, y2, 0.0f), glm::vec4(1.00f,0.90f,0.20f,1));
-    draw_cube(Mp * Mk_at_position( 1.0f*D, y2, 0.0f), glm::vec4(0.20f,1.00f,0.80f,1));
-
-    // Top (1)
-    constexpr float y3 = y2 + D;
-    draw_cube(Mp * Mk_at_position(0.0f, y3, 0.0f), glm::vec4(0.90f,0.30f,0.40f,1));
 
     glBindVertexArray(0);
     glUseProgram(0);
@@ -185,23 +101,23 @@ void View::mouseMoveEvent(QMouseEvent* event)
     const auto dx = static_cast<float>(distance.x());
     const auto dy = static_cast<float>(distance.y());
 
-    if (rotating)   // Rotate pyramid
+    if (rotating)   // Orbit camera
     {
-        pyramid_rotation_degree.y += 0.3f * dx;
-        pyramid_rotation_degree.x += 0.3f * dy;
+        cam_rotation_degree.y += 0.3f * dx;
+        cam_rotation_degree.x += 0.3f * dy;
         update(); return;
     }
 
-    if (panning)    // Translate pyramid (XZ plane; hold Shift for Y)
+    if (panning)    // Pan camera (XZ plane; hold Shift for Y)
     {
         if (event->modifiers() & Qt::ShiftModifier)
         {
-            pyramid_position.y += -0.01f * dy;
+            cam_position.y += -0.01f * dy;
         }
         else
         {
-            pyramid_position.x +=  0.01f * dx;
-            pyramid_position.z += -0.01f * dy;
+            cam_position.x +=  0.01f * dx;
+            cam_position.z +=  0.01f * dy;
         }
         update();
     }
@@ -210,21 +126,8 @@ void View::mouseMoveEvent(QMouseEvent* event)
 void View::wheelEvent(QWheelEvent* event)
 {
     const float steps = static_cast<float>(event->angleDelta().y()) / 120.0f;
-
-    if (const auto mods = event->modifiers(); mods & Qt::ControlModifier)
-    {
-        shear_theta_degree += 2.0f * steps; // θ
-    }
-    else if (mods & Qt::AltModifier || mods & Qt::ShiftModifier)
-    {
-        shear_phi_degree   += 2.0f * steps; // φ (Shift)
-    }
-    else
-    {
-        pyramid_scale = std::clamp(pyramid_scale * std::pow(1.05f, steps), 0.1f, 10.0f);
-    }
+    cam_position.z += -0.5f * steps;
     update();
-
 }
 
 void View::keyPressEvent(QKeyEvent* event)
@@ -250,18 +153,6 @@ void View::keyPressEvent(QKeyEvent* event)
         case Qt::Key_U: cam_rotation_degree.z -= rotate; break; // roll-
         case Qt::Key_O: cam_rotation_degree.z += rotate; break; // roll+
 
-        // Projection toggle
-        case Qt::Key_P:
-            use_perspective = !use_perspective;
-            update_projection(width(), height());
-            update();
-            break;
-
-        // Shear plane selection
-        case Qt::Key_1: shear_plane = ShearPlane::XY; break;
-        case Qt::Key_2: shear_plane = ShearPlane::XZ; break;
-        case Qt::Key_3: shear_plane = ShearPlane::YZ; break;
-
         default: return;
     }
     update();
@@ -269,17 +160,8 @@ void View::keyPressEvent(QKeyEvent* event)
 
 void View::reset_all()
 {
-    pyramid_scale = 1.0f;
-    shear_theta_degree = 0.0f;
-    shear_phi_degree = 0.0f;
-    shear_plane = ShearPlane::XY;
-    pyramid_rotation_degree = {0.0f, 0.0f, 0.0f};
-    pyramid_position = {0.0f, 0.0f, 0.0f};
-
-    cam_position = {3.0f, 2.5f, 11.0f};
+    cam_position = {3.0f, 3.5f, 12.5f};
     cam_rotation_degree = {-15.0f, 15.0f, 0.0f};
-
-    use_perspective = true;
     update_projection(width(), height());
     update();
 }

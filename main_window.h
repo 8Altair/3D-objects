@@ -2,8 +2,6 @@
 #define MAIN_WINDOW_H
 
 #include <QMainWindow>  // Qt base class for main application windows
-#include <QCheckBox>
-#include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
 
@@ -19,17 +17,6 @@ class MainWindow final : public QMainWindow // Main window class that publicly i
     Q_OBJECT    // Enables Qt meta-object features (signals/slots, RTTI)
 
     Ui::MainWindow *ui{}; // Pointer to auto-generated UI helper (owns child widgets)
-    QLineEdit *pyramid_scale_line_edit_{nullptr};
-    QLineEdit *shear_theta_line_edit_{nullptr};
-    QLineEdit *shear_phi_line_edit_{nullptr};
-    QComboBox *shear_plane_combo_box_{nullptr};
-    QCheckBox *projection_check_box_{nullptr};
-    QLineEdit *pyramid_rotation_x_line_edit_{nullptr};
-    QLineEdit *pyramid_rotation_y_line_edit_{nullptr};
-    QLineEdit *pyramid_rotation_z_line_edit_{nullptr};
-    QLineEdit *pyramid_position_x_line_edit_{nullptr};
-    QLineEdit *pyramid_position_y_line_edit_{nullptr};
-    QLineEdit *pyramid_position_z_line_edit_{nullptr};
     QLineEdit *camera_position_x_line_edit_{nullptr};
     QLineEdit *camera_position_y_line_edit_{nullptr};
     QLineEdit *camera_position_z_line_edit_{nullptr};

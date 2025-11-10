@@ -37,25 +37,13 @@ class View final : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core // 
     glm::mat4 projection{};  // Projection matrix
     glm::mat4 view_matrix{}; // View matrix (camera)
 
-    float pyramid_scale = 1.0f; // S
-    float shear_theta_degree = 0.0f;    // H angles (θ, φ)
-    float shear_phi_degree = 0.0f;  // H angles (θ, φ)
-    enum class ShearPlane { XY, XZ, YZ };
-    ShearPlane shear_plane = ShearPlane::XY; // Which shear matrix to use
-    glm::vec3 pyramid_rotation_degree = {0.0f, 0.0f, 0.0f}; // Rx,Ry,Rz (degrees)
-    glm::vec3 pyramid_position = {0.0f, 0.0f, 0.0f}; // T
-
-    glm::vec3 cam_position = {3.0f, 2.5f, 11.0f};      // Camera position
+    glm::vec3 cam_position = {3.0f, 3.5f, 12.5f};      // Camera position
     glm::vec3 cam_rotation_degree = { -15.0f, 15.0f, 0.0f }; // pitch,yaw,roll (deg), small tilt
 
-    bool use_perspective = true;
-
     QPoint last_mouse;
-    bool rotating = false;   // LMB: rotate pyramid
-    bool panning  = false;   // RMB: translate pyramid
+    bool rotating = false;   // LMB: orbit camera
+    bool panning  = false;   // RMB: pan camera
 
-    [[nodiscard]] glm::mat4 build_shear_matrix() const;
-    [[nodiscard]] glm::mat4 build_pyramid_Mp() const;
     [[nodiscard]] glm::mat4 build_view_matrix() const;
     void update_projection(int w, int h);
 
@@ -79,14 +67,6 @@ public:
     ~View() override;   // Destructor
 
     // Quick setters used by the toolbar (apply + repaint)
-    void set_pyramid_scale(const float v) { pyramid_scale = std::clamp(v, 0.1f, 10.0f); update(); }
-    void set_shear_theta(const float v) { shear_theta_degree = v; update(); }
-    void set_shear_phi(const float v) { shear_phi_degree = v; update(); }
-    void set_shear_plane_index(const int idx) { shear_plane = idx==0?ShearPlane::XY:idx==1?ShearPlane::XZ:ShearPlane::YZ; update(); }
-    void set_use_perspective(const bool on) { use_perspective = on; update_projection(width(), height()); update(); }
-
-    void set_pyramid_rotation(float x, float y, float z) { pyramid_rotation_degree = {x,y,z}; update(); }
-    void set_pyramid_position(float x, float y, float z) { pyramid_position = {x,y,z}; update(); }
     void set_cam_position(float x, float y, float z) { cam_position = {x,y,z}; update(); }
     void set_cam_rotation(float x, float y, float z) { cam_rotation_degree = {x,y,z}; update(); }
 
