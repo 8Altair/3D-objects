@@ -228,25 +228,21 @@ void View::mouseMoveEvent(QMouseEvent* event)
     if (scrolling_navigation_)
     {
         constexpr float orbit_speed = 0.005f;
-        glm::vec3 offset = cam_position - focus_point_;
         constexpr float min_radius = 0.25f;
-        const float radius = std::max(glm::length(offset), min_radius);
+
+        glm::vec3 offset = cam_position - focus_point_;
+        const float height = offset.y;
+        const float radius = std::max(glm::length(glm::vec2(offset.x, offset.z)), min_radius);
 
         float yaw = glm::radians(cam_rotation_degree.y);
-        float pitch = glm::radians(cam_rotation_degree.x);
-
         yaw -= dx * orbit_speed;
-        pitch += dy * orbit_speed;
-        pitch = std::clamp(pitch, -glm::radians(85.0f), glm::radians(85.0f));
 
-        const float cos_pitch = std::cos(pitch);
-        offset.x = radius * std::sin(yaw) * cos_pitch;
-        offset.y = radius * std::sin(pitch);
-        offset.z = radius * std::cos(yaw) * cos_pitch;
+        offset.x = radius * std::sin(yaw);
+        offset.y = height;
+        offset.z = radius * std::cos(yaw);
 
         cam_position = focus_point_ + offset;
         cam_rotation_degree.y = glm::degrees(yaw);
-        cam_rotation_degree.x = glm::degrees(pitch);
         emit_camera_state();
         update();
         return;
