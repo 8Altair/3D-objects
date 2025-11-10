@@ -38,6 +38,8 @@ private:
     // Raw GL objects
     GLuint vertex_array_object = 0;   // Vertex Array Object handle
     GLuint vertex_buffer_object = 0;   // Vertex Buffer Object handle
+    GLuint edge_vertex_array_object = 0;   // Wireframe VAO
+    GLuint edge_vertex_buffer_object = 0;  // Wireframe VBO
 
     glm::mat4 projection{};  // Projection matrix
     glm::mat4 view_matrix{}; // View matrix (camera)
@@ -56,6 +58,7 @@ private:
     void setup_shaders();   // Create, compile, link shaders; fetch uniform locations
     void setup_geometry();  // Create VAO/VBO and upload unit-cube vertex data
     void draw_cube(const glm::mat4 &model, const glm::vec4 &color);  // Set uniforms and draw 36 vertices for one cube
+    void draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color);
 
 protected:
     void initializeGL() override;   // Called once: load GL functions, create buffers/shaders, states

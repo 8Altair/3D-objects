@@ -18,6 +18,8 @@ View::~View()
     /* If a vertex array object (VAO) exists, delete it to release GPU state resources.
        Reset the handle to 0 to mark it invalid/unused. */
     if (vertex_array_object) glDeleteVertexArrays(1, &vertex_array_object); vertex_array_object = 0;
+    if (edge_vertex_buffer_object) glDeleteBuffers(1, &edge_vertex_buffer_object); edge_vertex_buffer_object = 0;
+    if (edge_vertex_array_object) glDeleteVertexArrays(1, &edge_vertex_array_object); edge_vertex_array_object = 0;
     /* If the shader program was successfully created, delete it from the GPU.
        Reset to 0 to indicate no active program is bound to this object anymore. */
     if (shader_program_id) glDeleteProgram(shader_program_id); shader_program_id = 0;
@@ -84,6 +86,9 @@ void View::paintGL()
         Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Slightly below origin
         Mg = glm::scale(Mg, glm::vec3(8.0f, 0.30f, 8.0f));
         draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f));
+        glLineWidth(2.0f);
+        draw_cube_edges(Mg, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        glLineWidth(1.0f);
     }
 
     glBindVertexArray(0);
@@ -296,6 +301,39 @@ void View::setup_geometry()
     // Clean up binds
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    // Edge (wireframe) geometry: 12 segments describing cube edges
+    constexpr GLfloat cube_edge_vertices[12 * 2 * 3] =
+    {
+        // Bottom rectangle
+        -0.5f, -0.5f, -0.5f,   0.5f, -0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,   0.5f, -0.5f,  0.5f,
+         0.5f, -0.5f,  0.5f,  -0.5f, -0.5f,  0.5f,
+        -0.5f, -0.5f,  0.5f,  -0.5f, -0.5f, -0.5f,
+        // Top rectangle
+        -0.5f,  0.5f, -0.5f,   0.5f,  0.5f, -0.5f,
+         0.5f,  0.5f, -0.5f,   0.5f,  0.5f,  0.5f,
+         0.5f,  0.5f,  0.5f,  -0.5f,  0.5f,  0.5f,
+        -0.5f,  0.5f,  0.5f,  -0.5f,  0.5f, -0.5f,
+        // Vertical edges
+        -0.5f, -0.5f, -0.5f,  -0.5f,  0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,   0.5f,  0.5f, -0.5f,
+         0.5f, -0.5f,  0.5f,   0.5f,  0.5f,  0.5f,
+        -0.5f, -0.5f,  0.5f,  -0.5f,  0.5f,  0.5f
+    };
+
+    glGenVertexArrays(1, &edge_vertex_array_object);
+    glBindVertexArray(edge_vertex_array_object);
+
+    glGenBuffers(1, &edge_vertex_buffer_object);
+    glBindBuffer(GL_ARRAY_BUFFER, edge_vertex_buffer_object);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_edge_vertices), cube_edge_vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), nullptr);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
 
 void View::draw_cube(const glm::mat4 &model, const glm::vec4 &color) // Draw one cube with a given transform and RGBA color
@@ -312,4 +350,15 @@ void View::draw_cube(const glm::mat4 &model, const glm::vec4 &color) // Draw one
     glDrawArrays(GL_TRIANGLES, 0, 36);  // Draw 36 vertices (12 triangles) for one cube
     /* Each draw call reuses the cube VBO: interpret the vertex data as 12 independent
        triangles (starting at vertex 0) that form a complete cube. */
+}
+
+void View::draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color)
+{
+    const glm::mat4 mvp = projection * view_matrix * model;
+
+    glBindVertexArray(edge_vertex_array_object);
+    glUniformMatrix4fv(uniform_location_mvp, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniform4f(uniform_location_color, color.r, color.g, color.b, color.a);
+    glDrawArrays(GL_LINES, 0, 12 * 2);
+    glBindVertexArray(vertex_array_object);
 }
