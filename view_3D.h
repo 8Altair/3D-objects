@@ -32,10 +32,10 @@ class View final : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core // 
 public: // Public interface exposed to UI
     enum class ColorMode : int
     {
-        Uniform = 0,
-        Position = 1,
-        Normal = 2,
-        UV = 3
+        Uniform = 0, // Solid object color
+        Position = 1, // Color changes with world position
+        Normal = 2, // Color shows surface direction
+        UV = 3 // Color shows texture coordinates
     };
 
     explicit View(QWidget *parent = nullptr);   // Constructor
