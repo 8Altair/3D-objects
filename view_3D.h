@@ -58,7 +58,7 @@ private:
     glm::mat4 projection{};  // Projection matrix
     glm::mat4 view_matrix{}; // View matrix (camera)
 
-    glm::vec3 cam_position = {3.0f, 3.5f, 12.5f};      // Camera position
+    glm::vec3 cam_position = {3.0f, 3.5f, 15.0f};      // Camera position
     glm::vec3 cam_rotation_degree = { -15.0f, 15.0f, 0.0f }; // pitch,yaw,roll (deg), small tilt
 
     QPoint last_mouse;

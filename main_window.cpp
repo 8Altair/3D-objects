@@ -82,7 +82,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         camera_position_x_line_edit_->setText("3.0");
         camera_position_y_line_edit_->setText("3.5");
-        camera_position_z_line_edit_->setText("12.5");
+        camera_position_z_line_edit_->setText("15.0");
 
         camera_rotation_x_line_edit_->setText("-15");
         camera_rotation_y_line_edit_->setText("15");
@@ -99,7 +99,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     tool_bar->addWidget(cam_position_label.release());
     camera_position_x_line_edit_ = create_double_line_edit("3.0", 55);
     camera_position_y_line_edit_ = create_double_line_edit("3.5", 55);
-    camera_position_z_line_edit_ = create_double_line_edit("12.5", 55);
+    camera_position_z_line_edit_ = create_double_line_edit("15.0", 55);
     tool_bar->addWidget(camera_position_x_line_edit_);
     tool_bar->addWidget(camera_position_y_line_edit_);
     tool_bar->addWidget(camera_position_z_line_edit_);

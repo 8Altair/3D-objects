@@ -95,9 +95,10 @@ void View::paintGL()
 
     // Ground plane
     {
+        constexpr float ground_extent = 12.0f;
         glm::mat4 Mg(1.0f);
         Mg = glm::translate(Mg, glm::vec3(0.0f, -2.0f, 0.0f));   // Slightly below origin
-        Mg = glm::scale(Mg, glm::vec3(8.0f, 0.30f, 8.0f));
+        Mg = glm::scale(Mg, glm::vec3(ground_extent, 0.30f, ground_extent));
         draw_cube(Mg, glm::vec4(15.0f/255.0f, 43.0f/255.0f, 70.0f/255.0f, 1.0f));
         glLineWidth(2.0f);
         draw_cube_edges(Mg, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -203,7 +204,7 @@ void View::reset_all()
     delete_imported_objects();
     doneCurrent();
 
-    cam_position = {3.0f, 3.5f, 12.5f};
+    cam_position = {3.0f, 3.5f, 15.0f};
     cam_rotation_degree = {-15.0f, 15.0f, 0.0f};
     update_projection(width(), height());
     emit_camera_state();
