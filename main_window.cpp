@@ -28,16 +28,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     const auto create_double_line_edit = [tool_bar](const QString& text, const int width)
     {
-        auto *line_edit = new QLineEdit(text, tool_bar);
+        auto line_edit = std::make_unique<QLineEdit>(text, tool_bar);
         line_edit->setFixedWidth(width);
         auto validator = std::make_unique<QDoubleValidator>();
         validator->setRange(-std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 6);
         validator->setNotation(QDoubleValidator::StandardNotation);
         validator->setLocale(QLocale::c());
-        validator->setParent(line_edit);
-        const auto *validator_ptr = validator.release();
-        line_edit->setValidator(validator_ptr);
-        return line_edit;
+        validator->setParent(line_edit.get());
+        line_edit->setValidator(validator.release());
+        return line_edit.release();
     };
 
     const auto read_float = [](const QLineEdit* edit)
@@ -48,8 +47,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
 
     // Reset
-    const QAction *act_reset = tool_bar->addAction("Reset");
-    if (QWidget *reset_button = tool_bar->widgetForAction(const_cast<QAction*>(act_reset)))
+    const QAction *action_reset = tool_bar->addAction("Reset");
+    if (QWidget *reset_widget = tool_bar->widgetForAction(const_cast<QAction*>(action_reset)))
+    {
+        QFont f = reset_widget->font();
+        f.setPointSizeF(f.pointSizeF() * 1.3);
+        reset_widget->setFont(f);
+    }
+    if (QWidget *reset_button = tool_bar->widgetForAction(const_cast<QAction*>(action_reset)))
     {
         reset_button->setObjectName("resetButton");
         reset_button->setStyleSheet(
@@ -68,7 +73,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             "}"
         );
     }
-    connect(act_reset, &QAction::triggered, this, [this, scene]
+    connect(action_reset, &QAction::triggered, this, [this, scene]
     {
         scene->reset_all();
 
@@ -82,7 +87,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     });
 
     tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Camera position (x, y, z):", tool_bar));
+    auto cam_position_label = std::make_unique<QLabel>("Camera position (x, y, z):", tool_bar);
+    {
+        QFont f = cam_position_label->font();
+        f.setPointSizeF(f.pointSizeF() * 1.1);
+        cam_position_label->setFont(f);
+    }
+    tool_bar->addWidget(cam_position_label.release());
     camera_position_x_line_edit_ = create_double_line_edit("3.0", 55);
     camera_position_y_line_edit_ = create_double_line_edit("3.5", 55);
     camera_position_z_line_edit_ = create_double_line_edit("12.5", 55);
@@ -102,7 +113,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Camera rotation editors
     tool_bar->addSeparator();
-    tool_bar->addWidget(new QLabel("Camera rotation (x, y, z):", tool_bar));
+    auto cam_rotation_label = std::make_unique<QLabel>("Camera rotation (x, y, z):", tool_bar);
+    {
+        QFont f = cam_rotation_label->font();
+        f.setPointSizeF(f.pointSizeF() * 1.1);
+        cam_rotation_label->setFont(f);
+    }
+    tool_bar->addWidget(cam_rotation_label.release());
     camera_rotation_x_line_edit_ = create_double_line_edit("-15", 55);
     camera_rotation_y_line_edit_ = create_double_line_edit("15", 55);
     camera_rotation_z_line_edit_ = create_double_line_edit("0", 55);
