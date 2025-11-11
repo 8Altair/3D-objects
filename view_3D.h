@@ -35,7 +35,8 @@ public: // Public interface exposed to UI
         Uniform = 0, // Solid object color
         Position = 1, // Color changes with world position
         Normal = 2, // Color shows surface direction
-        UV = 3 // Color shows texture coordinates
+        UV = 3, // Color shows texture coordinates
+        PositionNormal = 4 // Color mixes position and normal
     };
 
     explicit View(QWidget *parent = nullptr);   // Constructor

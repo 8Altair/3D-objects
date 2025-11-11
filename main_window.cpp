@@ -236,14 +236,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     color_mode_combo_box_->addItems({QStringLiteral("Uniform"),
                                      QStringLiteral("Position"),
                                      QStringLiteral("Normal"),
-                                     QStringLiteral("UV")});
+                                     QStringLiteral("UV"),
+                                     QStringLiteral("Position + Normal")});
     color_mode_combo_box_->setCurrentIndex(static_cast<int>(View::ColorMode::Uniform));
     color_mode_combo_box_->setFixedWidth(140);
     help_tool_bar->addWidget(color_mode_combo_box_);
     connect(color_mode_combo_box_, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [scene](const int index)
             {
-                const int clamped = std::clamp(index, 0, 3);
+                const int clamped = std::clamp(index, 0, 4);
                 scene->set_color_mode(static_cast<View::ColorMode>(clamped));
             });
 

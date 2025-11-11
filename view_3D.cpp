@@ -639,6 +639,12 @@ void View::setup_shaders()
         {
             final_color = encode_uv();
         }
+        else if (color_mode == 4)
+        {
+            vec3 position_color = encode_position(); // World position visualization
+            vec3 normal_color = encode_normal(); // Surface normal visualization
+            final_color = mix(position_color, normal_color, 0.5); // Blend both sources equally
+        }
 
         if (color_mode != 0)
         {
