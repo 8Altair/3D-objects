@@ -252,7 +252,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     const QString help_text =
         "Left mouse button: Orbit scene / deselect   |   Middle mouse button (hold): Orbit scene   |   Right mouse button (+Shift): Pan or drag selected object\n"
-        "Mouse wheel: Dolly scene (no selection) or scale selected object   |   Double-click: Select object   |   W/A/S/D, R/F: Move camera   |   I/K, J/L, U/O: Rotate camera";
+        "Mouse wheel: Dolly scene (no selection) or scale selected object   |   Double-click: Select object   |   Backspace/Delete: Remove selected object   |   W/A/S/D, R/F: Move camera   |   I/K, J/L, U/O: Rotate camera";
 
     help_label_ = new QLabel(help_text, help_tool_bar);
     help_label_->setWordWrap(true);

@@ -323,6 +323,14 @@ void View::keyPressEvent(QKeyEvent *event)
 
     switch (event->key())
     {
+        case Qt::Key_Backspace:
+        case Qt::Key_Delete:
+            if (selected_object_index_ >= 0 && selected_object_index_ < static_cast<int>(imported_objects_.size()))
+            {
+                delete_object(selected_object_index_);
+            }
+            return;
+
         // Camera translation (V)
         case Qt::Key_W: cam_position.z -= move; break;
         case Qt::Key_S: cam_position.z += move; break;
@@ -533,6 +541,58 @@ void View::set_color_mode(const ColorMode mode)
     if (color_mode_ == mode) return; // Skip redundant updates
     color_mode_ = mode; // Store new color interpretation mode
     update(); // Trigger repaint to reflect change
+}
+
+void View::delete_object(const int index)
+{
+    if (index < 0 || index >= static_cast<int>(imported_objects_.size()))
+    {
+        return;
+    }
+
+    makeCurrent();
+    auto &object = imported_objects_[index];
+    if (object.vbo)
+    {
+        glDeleteBuffers(1, &object.vbo);
+        object.vbo = 0;
+    }
+    if (object.vao)
+    {
+        glDeleteVertexArrays(1, &object.vao);
+        object.vao = 0;
+    }
+    imported_objects_.erase(imported_objects_.begin() + index);
+    doneCurrent();
+
+    if (imported_objects_.empty())
+    {
+        selected_object_index_ = -1;
+        focus_point_ = {0.0f, 0.0f, 0.0f};
+    }
+    else
+    {
+        if (selected_object_index_ == index)
+        {
+            selected_object_index_ = std::min(index, static_cast<int>(imported_objects_.size()) - 1);
+        }
+        else if (selected_object_index_ > index)
+        {
+            selected_object_index_ -= 1;
+        }
+
+        if (selected_object_index_ >= 0 && selected_object_index_ < static_cast<int>(imported_objects_.size()))
+        {
+            focus_point_ = imported_objects_[selected_object_index_].translation;
+        }
+        else
+        {
+            focus_point_ = {0.0f, 0.0f, 0.0f};
+        }
+    }
+
+    dragging_object_ = false;
+    update();
 }
 
 void View::delete_imported_objects()

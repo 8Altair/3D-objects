@@ -137,6 +137,7 @@ private: // Internal helpers and state
     void draw_cube_edges(const glm::mat4 &model, const glm::vec4 &color); // Draw cube wireframe
     void draw_mesh(const ImportedObject &object, const glm::mat4 &model, const glm::vec4 &color, ColorMode mode); // Draw imported mesh instance
     void delete_imported_objects(); // Release GPU resources for all meshes
+    void delete_object(int index); // Remove a single imported object from the scene
     [[nodiscard]] bool compute_ray(const QPoint &position, glm::vec3 &origin, glm::vec3 &direction) const; // Build picking ray from screen point
     [[nodiscard]] bool intersect_ground_plane(const QPoint &position, glm::vec3 &hit_point) const; // Ray-test against ground plane
     [[nodiscard]] int pick_object(const QPoint &position) const; // Return index of mesh hit by ray
