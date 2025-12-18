@@ -1,7 +1,7 @@
 # 3D Objects
 
 ## Overview
-**3D Objects** is a **Qt 6** desktop application that integrates **OpenGL 4.6 Core Profile** into a Qt Widgets interface.  
+**3D Objects** is a **Qt 6** desktop application that integrates **OpenGL 4.5 Core Profile** into a Qt Widgets interface.  
 It renders a 3D scene consisting of a flat ground plane and any number of user‑imported 3D models.  
 Models are loaded at runtime from **OBJ files** using the **Assimp** library, so you can drop arbitrary meshes into the scene without recompiling.  
 Each imported mesh gets its own VAO/VBO and can be individually selected, transformed, and recolored.
@@ -10,7 +10,7 @@ Each imported mesh gets its own VAO/VBO and can be individually selected, transf
 
 ## Features
 
-- Modern **OpenGL 4.6 Core Profile** (no deprecated functions)
+- Modern **OpenGL 4.5 Core Profile** (no deprecated functions)
 - Dynamic loading of OBJ files using **Assimp**
 - Flat **ground plane** as a base for all models
 - **Camera controls**:
